@@ -16,8 +16,6 @@ from scipy import stats
 
 rooms_ix, bedrooms_ix, population_ix, household_ix = 3, 4, 5, 6
 
-"change"
-
 def add_extra_features(X, add_bedrooms_per_room=True):
     rooms_per_household = X[:, rooms_ix] / X[:, household_ix]
     population_per_household = X[:, population_ix] / X[:, household_ix]
