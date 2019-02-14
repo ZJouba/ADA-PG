@@ -16,6 +16,7 @@ from scipy import stats
 
 rooms_ix, bedrooms_ix, population_ix, household_ix = 3, 4, 5, 6
 
+
 def add_extra_features(X, add_bedrooms_per_room=True):
     rooms_per_household = X[:, rooms_ix] / X[:, household_ix]
     population_per_household = X[:, population_ix] / X[:, household_ix]
@@ -25,17 +26,22 @@ def add_extra_features(X, add_bedrooms_per_room=True):
     else:
         return np.c_[X, rooms_per_household, population_per_household]
 
+
 class DataFrameSelector(BaseEstimator, TransformerMixin):
     def __init__(self, attribute_names):
         self.attribute_names = attribute_names
+
     def fit(self, X, y=None):
         return self
+
     def transform(self, X):
         return X[self.attribute_names].values
+
 
 DOWNLOAD_ROOT = "https://raw.githubusercontent.com/ageron/handson-ml/master/"
 HOUSING_PATH = "datasets/housing"
 HOUSING_URL = DOWNLOAD_ROOT + HOUSING_PATH + "/housing.tgz"
+
 
 def fetch_housing_data(housing_url=HOUSING_URL, housing_path=HOUSING_PATH):
     if not os.path.isfile(os.path.join(housing_path, "housing.csv")):
@@ -49,11 +55,14 @@ def fetch_housing_data(housing_url=HOUSING_URL, housing_path=HOUSING_PATH):
     else:
         print("\n" + "File already downloaded and extracted" + "\n")
 
+
 fetch_housing_data()
+
 
 def load_housing_data(housing_path=HOUSING_PATH):
     csv_path = os.path.join(housing_path, "housing.csv")
     return pd.read_csv(csv_path)
+
 
 housing = load_housing_data()
 # print("\n")
@@ -83,7 +92,7 @@ num_pipeline = Pipeline([
     ('imputer', SimpleImputer(strategy="median")),
     ('attribs_adder', FunctionTransformer(add_extra_features, validate=False)),
     ('std_scaler', StandardScaler()),
-    ])
+])
 
 cat_pipeline = Pipeline([
     ('selector', DataFrameSelector(cat_attribs)),
@@ -107,18 +116,22 @@ supportVectorM = SVR()
 # ]
 
 param_grid = [
-        {'kernel': ['linear'], 'C': [10., 30., 100., 300., 1000., 3000., 10000., 30000.0]},
-        {'kernel': ['rbf'], 'C': [1.0, 3.0, 10., 30., 100., 300., 1000.0],
-         'gamma': [0.01, 0.03, 0.1, 0.3, 1.0, 3.0]},
-    ]
+    {'kernel': ['linear'], 'C': [10., 30., 100.,
+                                 300., 1000., 3000., 10000., 30000.0]},
+    {'kernel': ['rbf'], 'C': [1.0, 3.0, 10., 30., 100., 300., 1000.0],
+     'gamma': [0.01, 0.03, 0.1, 0.3, 1.0, 3.0]},
+]
 
-grid_search = GridSearchCV(supportVectorM, param_grid, cv=5, scoring='neg_mean_squared_error', verbose=1, n_jobs=4)
+grid_search = GridSearchCV(supportVectorM, param_grid, cv=5,
+                           scoring='neg_mean_squared_error', verbose=1, n_jobs=4)
 
 grid_search.fit(housing_prepared, housing_labels)
 
 n_MSE = grid_search.best_score_
 RMSE = np.sqrt(-1*n_MSE)
-print("+++++++++++++++++++++++++++++++++++++++++++++++\n" + "The root mean squared error, for grid search, is:")
+print("+++++++++++++++++++++++++++++++++++++++++++++++\n" +
+      "The root mean squared error, for grid search, is:")
 print(RMSE)
-print("\n+++++++++++++++++++++++++++++++++++++++++++++++\n" + "The best parameters determined by the grid search is:")
+print("\n+++++++++++++++++++++++++++++++++++++++++++++++\n" +
+      "The best parameters determined by the grid search is:")
 print(grid_search.best_params_)
