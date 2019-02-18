@@ -19,7 +19,6 @@ y = np.ravel(y)
 
 some_digit = X[36000]
 
-
 # some_digit_image = some_digit.reshape(28, 28)
 
 # plt.imshow(some_digit_image, cmap=matplotlib.cm.binary,
@@ -50,7 +49,7 @@ param_grid = [
 ]
 
 Gridify = GridSearchCV(KNeigh_class, param_grid, cv=5,
-                       scoring='neg_mean_squared_error', n_jobs=-1)
+                       scoring='neg_mean_squared_error', n_jobs=-1, verbose=1)
 
 Gridify.fit(X_train, y_train)
 
