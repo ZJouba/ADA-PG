@@ -4,14 +4,22 @@ import matplotlib.pyplot as plt
 import matplotlib.rcsetup as rcsetup
 import numpy as np
 
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import GridSearchCV
+
 mnist = sio.loadmat(
     r'C:\Users\Zack\scikit_learn_data\mldata\mnist-original.mat')
 
 X, y = mnist["data"], mnist["label"]
 
 X = np.transpose(X)
+y = np.transpose(y)
+y = np.ravel(y)
 
-# some_digit = X[36000]
+some_digit = X[36000]
+
+
 # some_digit_image = some_digit.reshape(28, 28)
 
 # plt.imshow(some_digit_image, cmap=matplotlib.cm.binary,
@@ -23,6 +31,25 @@ X = np.transpose(X)
 
 X_train, X_test, y_train, y_test = X[:60000], X[60000:], y[:60000], y[60000:]
 
-shuffle_index = np.random.permutation(60000)
+state = np.random.get_state()
+np.random.shuffle(X_train)
+np.random.set_state(state)
+np.random.shuffle(y_train)
 
-print(shuffle_index)
+KNeigh_class = KNeighborsClassifier()
+# KNeigh_class.fit(X_train, y_train)
+
+print(cross_val_score(KNeigh_class, X_train, y_train, cv=3, scoring="accuracy"))
+
+# print("\n Digit predicted as: " + str(KNeigh_class.predict([some_digit])))
+# print("\n Digit is: " + str(y[36000]))
+
+param_grid = [
+    {'weights': ['uniform', 'distance']},
+    {'n_neighbors': [3, 6, 9]},
+]
+
+Gridify = GridSearchCV(KNeigh_class, param_grid, cv=5,
+                       scoring='neg_mean_squared_error')
+
+Gridify.fit(X_train, y_train)
