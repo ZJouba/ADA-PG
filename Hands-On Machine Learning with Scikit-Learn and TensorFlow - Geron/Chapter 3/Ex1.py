@@ -50,6 +50,12 @@ param_grid = [
 ]
 
 Gridify = GridSearchCV(KNeigh_class, param_grid, cv=5,
-                       scoring='neg_mean_squared_error')
+                       scoring='neg_mean_squared_error', n_jobs=-1)
 
 Gridify.fit(X_train, y_train)
+
+print(Gridify.best_params_)
+print(Gridify.best_estimator_)
+
+print(cross_val_score(Gridify.best_estimator_,
+                      X_train, y_train, cv=3, scoring="accuracy"))
