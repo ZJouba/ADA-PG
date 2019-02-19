@@ -15,11 +15,8 @@ X = np.transpose(X)
 y = np.transpose(y)
 y = np.ravel(y)
 
-some_digit = X[4]
-some_digit = some_digit.reshape(28, 28)
-
 X_train, X_test, y_train, y_test = X[0:
-                                     10000], X[10000:20000], y[0:10000], y[10000:20000]
+                                     10], X[10000:20000], y[0:10000], y[10000:20000]
 
 # digit_plot = plt.figure(1)
 # plt.imshow(
@@ -62,12 +59,17 @@ def ShiftDigit(image, direction):
 # plt.show()
 
 
-shifted_images = np.empty([])
+shifted_images = np.empty([0, 0])
+temp_digit = np.empty([0, 0])
+count = 0
 
-for images in X_train:
-    for direc in range(1, 4):
-        shifted_images = np.append(
-            shifted_images, ShiftDigit(X_train[images], direc))
+for images in range(len(X_train)):
+    for direc in range(1, 5):
+        new_digit = ShiftDigit(X_train[images].reshape(28, 28), direc)
+        new_digit = new_digit.reshape(784)
+        shifted_images = np.add(
+            shifted_images, new_digit.transpose)
+        count = count + 1
 
 print(X_train.shape)
 print(shifted_images.shape)
