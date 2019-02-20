@@ -110,7 +110,8 @@ else:
 # plt.draw()
 # plt.show()
 
-KNeigh_class = KNeighborsClassifier(n_neighbors=1, weights='distance')
+KNeigh_class = KNeighborsClassifier(algorithm='auto', leaf_size=30, metric='minkowski',
+                                    metric_params=None, n_jobs=1, n_neighbors=5, p=2, weights='distance')
 
 print(cross_val_score(KNeigh_class,
                       X_train_new, y_train, cv=2, scoring="accuracy", n_jobs=7, verbose=2))
