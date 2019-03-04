@@ -16,12 +16,12 @@ X_scaled = scaler.fit_transform(X)
 
 
 C = 1.0
+iters = 5000
 models = (
     LinearSVC(
         C=C,
         loss='hinge',
-        random_state=42,
-        max_iter=10000
+        max_iter=iters
     ),
     SVC(
         kernel='linear',
@@ -30,9 +30,7 @@ models = (
     SGDClassifier(
         loss='hinge',
         alpha=(1/(len(X)*C)),
-        max_iter=10000,
-        tol=-np.infty,
-        random_state=42
+        max_iter=iters,
     )
 )
 
@@ -56,7 +54,8 @@ for model, style in zip(models, styles):
     plt.scatter(meshX, meshY, c=y, cmap=plt.cm.coolwarm,
                 s=20, edgecolors='k')
 
-labelLines(plt.gca().get_lines(), zorder=2.5)
+labelLines(plt.gca().get_lines(), backgroundcolor=(
+    1, 1, 1, 0.4), zorder=2)
 plt.xlim(xx.min(), xx.max())
 plt.ylim(xx.min(), xx.max())
 plt.xlabel('Sepal length')
