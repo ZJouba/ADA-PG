@@ -27,4 +27,4 @@ randomS = RandomizedSearchCV(
 
 randomS.fit(X_train_scaled, y_train)
 
-joblib.dump(randomS.best_estimator_, 'randomS_bestE.pkl', compress = 1)
+joblib.dump(randomS.best_estimator_, 'randomS_bestE.pkl', compress=1)
