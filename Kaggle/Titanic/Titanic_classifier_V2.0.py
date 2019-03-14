@@ -6,6 +6,7 @@ import seaborn as sb
 import matplotlib.pyplot as plt
 import re
 import pickle
+import csv
 
 from tabulate import tabulate
 from sklearn.preprocessing import OneHotEncoder
@@ -23,13 +24,14 @@ testFile = os.path.join(currentPath, 'test.csv')
 
 trainData = pd.read_csv(trainFile, header=0, dtype={'Age': np.float64})
 testData = pd.read_csv(testFile, header=0, dtype={'Age': np.float64})
+testData.insert(1, column='Survived', value=0)
 
-allData = [trainData, testData]
+allData = trainData.append(testData, ignore_index=True)
 
 
 def dataManipulate(allData):
     def titles(name):
-        search = re.search(' ([A-Za-z]+)\.', name)
+        search = re.search(r' ([A-Za-z]+)\.', name)
         if search:
             return search.group(1)
         return ""
@@ -44,30 +46,30 @@ def dataManipulate(allData):
         'Mr': 'Mr'
     }
 
-    for dataset in allData:
-        dataset['FamilySize'] = dataset['SibSp'] + dataset['Parch'] + 1
-        dataset['Alone'] = 0
-        dataset.loc[dataset['FamilySize'] == 1, 'Alone'] = 1
-        dataset['Level'] = dataset['Cabin'].str[0]
-        dataset['Title'] = dataset['Name'].apply(titles)
-        dataset['Title'] = dataset['Title'].map(
-            commonTitles).fillna('Rare')
+    allData['FamilySize'] = allData['SibSp'] + allData['Parch'] + 1
+    allData['Alone'] = 0
+    allData.loc[allData['FamilySize'] == 1, 'Alone'] = 1
+    allData['Level'] = allData['Cabin'].str[0]
+    allData['Title'] = allData['Name'].apply(titles)
+    allData['Title'] = allData['Title'].map(
+        commonTitles).fillna('Rare')
+    allData['AgeGroups'] = pd.cut(allData['Age'], 10)
 
-    trainData['AgeGroups'] = pd.cut(trainData['Age'], 10)
+    grouped = allData.groupby(['Sex', 'Pclass', 'Title'])
+    allData.to_csv(os.path.join(currentPath, 'allData.csv'),
+                   sep=',', index=False)
 
-    grouped = trainData.groupby(['Sex', 'Pclass', 'Title'])
-
-    trainData['Age'] = grouped['Age'].apply(lambda x: x.fillna(x.median()))
-    trainData.loc[trainData['Fare'] == 0.0, 'Fare'] = np.NaN
-    trainData['Fare'] = grouped['Fare'].apply(
+    allData['Age'] = grouped['Age'].apply(lambda x: x.fillna(x.median()))
+    allData.loc[allData['Fare'] == 0.0, 'Fare'] = np.NaN
+    allData['Fare'] = grouped['Fare'].apply(
         lambda x: x.fillna(x.median()))
 
-    embarkedMost = trainData['Embarked'].value_counts().index[0]
+    embarkedMost = allData['Embarked'].value_counts().index[0]
 
-    trainData['Embarked'] = trainData['Embarked'].fillna(embarkedMost)
+    allData['Embarked'] = allData['Embarked'].fillna(embarkedMost)
 
-    trainData.to_csv(os.path.join(
-        currentPath, 'full.csv'), sep=',', index=False)
+    allData.to_csv(os.path.join(
+        currentPath, 'allData.csv'), sep=',', index=False)
 
 
 def dataPreparation(data):
@@ -137,43 +139,57 @@ def predictCabins(data, labels, predictions):
 
 def finaldataPreparation(data):
     temp = data
-
-    encoder = OneHotEncoder(sparse=False, categories='auto')
-    encodedSex = encoder.fit_transform(temp[['Sex']])
-    temp['Sex'] = encodedSex
-    encoder1 = OneHotEncoder(sparse=False, categories='auto')
-    encodedEmbarked = encoder1.fit_transform(temp[['Embarked']])
-    temp['Embarked'] = encodedEmbarked
-    encoder2 = OneHotEncoder(sparse=False, categories='auto')
-    encodedTitle = encoder2.fit_transform(temp[['Title']])
-    temp['Title'] = encodedTitle
     encoder3 = OneHotEncoder(sparse=False, categories='auto')
     encodedLevel = encoder3.fit_transform(temp[['Level']])
     temp['Level'] = encodedLevel
 
-    temp = temp.drop(
-        ['Name', 'Ticket', 'AgeGroups'], axis=1)
-
-    pickle.dump(temp, open(os.path.join(
-        currentPath, 'finalData.p'), 'wb'))
-
     return temp
 
 
-if os.path.isfile(os.path.join(currentPath, 'full.csv')):
-    if input('Data csv already exists. Redo? [y/n] \t') == 'y':
+def tuneHyperparams(finalModel, X_train, y_train):
+    params = {
+        'n_estimators': hp.choice('n_estimators', np.arange(1, 1001, dtype=int)),
+        'min_samples_split': hp.choice('min_samples_split', np.arange(1, 10, dtype=int)),
+        'max_features': hp.uniform('max_features', 0.1, 1),
+    }
+
+    def objective(params):
+        cv_results = cross_val_score(
+            finalModel, X_train, y_train, scoring='accuracy', cv=3)
+
+        best_score = max(cv_results)
+
+        loss = 1 - best_score
+
+        return{'loss': loss, 'params': params, 'status': STATUS_OK}
+
+    trials = Trials()
+    bestParams = fmin(
+        fn=objective,
+        space=params,
+        algo=tpe.suggest,
+        max_evals=150,
+        trials=trials
+    )
+    pickle.dump(bestParams, open(os.path.join(
+        currentPath, 'bestParams.p'), 'wb'))
+    return bestParams
+
+
+if os.path.isfile(os.path.join(currentPath, 'allData.csv')):
+    if input('Data already prepared for level prediction. Redo? [y/n] \t') == 'y':
         dataManipulate(allData)
     else:
-        trainData = pd.read_csv(os.path.join(
-            currentPath, 'full.csv'), header=0, dtype={'Age': np.float64})
+        allData = pd.read_csv(os.path.join(
+            currentPath, 'allData.csv'), header=0, dtype={'Age': np.float64})
 else:
     dataManipulate(allData)
 
 
 if os.path.isfile(os.path.join(currentPath, 'cabinTrain.p')):
-    if input('Train dataset already exists. Redo? [y/n] \t') == 'y':
+    if input('Train allData already exists. Redo? [y/n] \t') == 'y':
 
-        dataPreparation(trainData)
+        dataPreparation(allData)
         cabinTrain = pickle.load(open(os.path.join(
             currentPath, 'cabinTrain.p'), 'rb'))
         cabinLabel = pickle.load(open(os.path.join(
@@ -190,7 +206,7 @@ if os.path.isfile(os.path.join(currentPath, 'cabinTrain.p')):
         cabinPredict = pickle.load(open(os.path.join(
             currentPath, 'cabinPredict.p'), 'rb'))
 else:
-    dataPreparation(trainData)
+    dataPreparation(allData)
     cabinTrain = pickle.load(open(os.path.join(
         currentPath, 'cabinTrain.p'), 'rb'))
     cabinLabel = pickle.load(open(os.path.join(
@@ -218,7 +234,26 @@ else:
     model = pickle.load(
         open(os.path.join(currentPath, 'cabinModel.p'), 'rb'))
 
-if not os.path.isfile(os.path.join(currentPath, 'readyData.csv')):
+if os.path.isfile(os.path.join(currentPath, 'allData.p')):
+    if input('Model ready data already exists. Redo? [y/n] \t') == 'y':
+        encoder = pickle.load(open('encoder.p', 'rb'))
+
+        cabinTrain['Level'] = encoder.inverse_transform(cabinLabel)
+
+        fullData = pd.DataFrame.append(cabinTrain, cabinPredict)
+        fullData.sort_values(by="PassengerId", ascending=True, inplace=True)
+
+        trainDataF = fullData[:len(trainData)]
+        testDataF = fullData.iloc[len(trainData):]
+
+        pickle.dump(fullData, open(os.path.join(
+            currentPath, 'allData.p'), 'wb'))
+    else:
+        fullData = pickle.load(
+            open(os.path.join(currentPath, 'allData.p'), 'rb'))
+        trainDataF = fullData[:len(trainData)]
+        testDataF = fullData.iloc[len(trainData):]
+else:
     encoder = pickle.load(open('encoder.p', 'rb'))
 
     cabinTrain['Level'] = encoder.inverse_transform(cabinLabel)
@@ -226,80 +261,172 @@ if not os.path.isfile(os.path.join(currentPath, 'readyData.csv')):
     fullData = pd.DataFrame.append(cabinTrain, cabinPredict)
     fullData.sort_values(by="PassengerId", ascending=True, inplace=True)
 
-    trainData['Level'] = fullData['Level']
+    trainDataF = fullData[:len(trainData)]
+    testDataF = fullData.iloc[len(trainData):]
 
-    trainData = trainData.drop(['Cabin'], axis=1)
+    pickle.dump(fullData, open(os.path.join(
+        currentPath, 'allData.p'), 'wb'))
 
-    trainData.to_csv(os.path.join(
-        currentPath, 'readyData.csv'), sep=',', index=False)
+
+if os.path.isfile(os.path.join(currentPath, 'finalModel.p')):
+    if input('\n Model already exists. Remake? [y/n] \t') == 'y':
+        finalData = finaldataPreparation(trainDataF)
+
+        train, test = train_test_split(finalData, stratify=finalData['Sex'])
+
+        y_train = train.pop('Survived')
+        X_train = train
+
+        y_test = test.pop('Survived')
+        X_test = test
+
+        finalModel = RandomForestClassifier()
+
+        finalModel.fit(X_train, y_train)
+        print('Cross validation accuracy for untuned: \t', max(
+            cross_val_score(finalModel, X_train, y_train, scoring='accuracy', cv=3)))
+
+        if input('\n Do you wish to tune the hyperparameters [y/n] \t') == 'y':
+            bestParams = tuneHyperparams(finalModel, X_train, y_train)
+            print(bestParams)
+        else:
+            try:
+                bestParams = pickle.load(
+                    open(os.path.join(currentPath, 'bestParams.p'), 'rb'))
+                print(bestParams)
+            except:
+                print('/n No tuning done. Tuning now...')
+                bestParams = tuneHyperparams(finalModel, X_train, y_train)
+                print(bestParams)
+
+        model2 = RandomForestClassifier(**bestParams)
+
+        model2.fit(X_train, y_train)
+        print('Cross validation accuracy for tuned: \t', max(
+            cross_val_score(model2, X_train, y_train, scoring='accuracy', cv=3)))
+
+        y_predict = model2.predict(X_test)
+        print('Prediction accuracy for tuned: \t',
+              accuracy_score(y_predict, y_test))
+
+        featureImportance = pd.DataFrame(
+            model2.feature_importances_, index=X_train.columns, columns=['importance'])
+        featureImportance.sort_values(
+            by="importance", ascending=False, inplace=True)
+        print('\n', tabulate(featureImportance, headers='keys'), '\n')
+
+        featuresDrop = featureImportance[featureImportance['importance'] < 0.02]
+        featuresDrop = featuresDrop.index.tolist()
+        pickle.dump(featuresDrop, open(os.path.join(
+            currentPath, 'featuresDrop.p'), 'wb'))
+
+        lastTest = finalData.drop(
+            featuresDrop, axis=1)
+
+        lTrain, lTest = train_test_split(
+            lastTest, test_size=0.1, stratify=lastTest['Sex'])
+
+        yTrain = lTrain.pop('Survived')
+        Xtrain = lTrain
+
+        yTest = lTest.pop('Survived')
+        Xtest = lTest
+
+        model2.fit(Xtrain, yTrain)
+        print('Cross validation accuracy for final: \t', max(
+            cross_val_score(model2, Xtrain, yTrain, scoring='accuracy', cv=3)))
+
+        y_predict = model2.predict(Xtest)
+        print('Prediction accuracy for final: \t',
+              accuracy_score(y_predict, yTest))
+
+        pickle.dump(model2, open(os.path.join(
+            currentPath, 'finalModel.p'), 'wb'))
+    else:
+        lastModel = pickle.load(
+            open(os.path.join(currentPath, 'finalModel.p'), 'rb'))
 else:
-    trainData = pd.read_csv(os.path.join(
-        currentPath, 'readyData.csv'), header=0, dtype={'Age': np.float64})
+    finalData = finaldataPreparation(trainDataF)
 
-finalData = finaldataPreparation(trainData)
+    train, test = train_test_split(finalData, stratify=finalData['Sex'])
 
-train, test = train_test_split(finalData)
+    y_train = train.pop('Survived')
+    X_train = train
 
-y_train = train.pop('Survived')
-X_train = train
+    y_test = test.pop('Survived')
+    X_test = test
 
-y_test = test.pop('Survived')
-X_test = test
+    finalModel = RandomForestClassifier()
 
-finalModel = RandomForestClassifier()
+    finalModel.fit(X_train, y_train)
+    print('Cross validation accuracy for untuned: \t', max(
+        cross_val_score(finalModel, X_train, y_train, scoring='accuracy', cv=3)))
 
-finalModel.fit(X_train, y_train)
-print(max(cross_val_score(finalModel, X_train, y_train, scoring='accuracy', cv=3)))
-
-if input('\n Do you wish to tune the hyperparameters [y/n] \t') == 'y':
-    params = {
-        'n_estimators': hp.choice('n_estimators', np.arange(1, 1001, dtype=int)),
-        'min_samples_split': hp.qlognormal('min_samples_split', 2, 1, 1),
-        'max_features': hp.uniform('max_features', 0.1, 1),
-        'criterion': hp.choice('criterion', ['gini', 'entropy']),
-    }
-
-    def objective(params):
-        cv_results = cross_val_score(
-            finalModel, X_train, y_train, scoring='accuracy', cv=3)
-
-        best_score = max(cv_results)
-
-        loss = 1 - best_score
-
-        return{'loss': loss, 'params': params, 'status': STATUS_OK}
-
-    trials = Trials()
-    bestParams = fmin(
-        fn=objective,
-        space=params,
-        algo=tpe.suggest,
-        max_evals=150,
-        trials=trials
-    )
-    pickle.dump(bestParams, open(os.path.join(
-        currentPath, 'bestParams.p'), 'wb'))
-    print(bestParams)
-else:
-    try:
-        bestParams = pickle.load(
-            open(os.path.join(currentPath, 'bestParams.p'), 'rb'))
+    if input('\n Do you wish to tune the hyperparameters [y/n] \t') == 'y':
+        bestParams = tuneHyperparams(finalModel, X_train, y_train)
         print(bestParams)
-    except:
-        print('/n No tuning done. Tuning now...')
+    else:
+        try:
+            bestParams = pickle.load(
+                open(os.path.join(currentPath, 'bestParams.p'), 'rb'))
+            print(bestParams)
+        except:
+            print('/n No tuning done. Tuning now...')
+            bestParams = tuneHyperparams(finalModel, X_train, y_train)
+            print(bestParams)
 
-# model2 = RandomForestClassifier(**bestParams)
-model2 = RandomForestClassifier(
-    criterion='gini', max_features=0.22931877273925447, min_samples_split=4, n_estimators=878
+    model2 = RandomForestClassifier(**bestParams)
+
+    model2.fit(X_train, y_train)
+    print('Cross validation accuracy for tuned: \t', max(
+        cross_val_score(model2, X_train, y_train, scoring='accuracy', cv=3)))
+
+    y_predict = model2.predict(X_test)
+    print('Prediction accuracy for tuned: \t',
+          accuracy_score(y_predict, y_test))
+
+    featureImportance = pd.DataFrame(
+        model2.feature_importances_, index=X_train.columns, columns=['importance'])
+    featureImportance.sort_values(
+        by="importance", ascending=False, inplace=True)
+    print('\n', tabulate(featureImportance, headers='keys'), '\n')
+
+    featuresDrop = featureImportance[featureImportance['importance'] < 0.02]
+    featuresDrop = featuresDrop.index.tolist()
+
+    lastTest = finalData.drop(
+        featuresDrop, axis=1)
+
+    lTrain, lTest = train_test_split(
+        lastTest, test_size=0.1, stratify=lastTest['Sex'])
+
+    yTrain = lTrain.pop('Survived')
+    Xtrain = lTrain
+
+    yTest = lTest.pop('Survived')
+    Xtest = lTest
+
+    model2.fit(Xtrain, yTrain)
+    print('Cross validation accuracy for final: \t', max(
+        cross_val_score(model2, Xtrain, yTrain, scoring='accuracy', cv=3)))
+
+    y_predict = model2.predict(Xtest)
+    print('Prediction accuracy for final: \t',
+          accuracy_score(y_predict, yTest))
+
+    pickle.dump(model2, open(os.path.join(
+        currentPath, 'finalModel.p'), 'wb'))
+
+testDataF.pop('Survived')
+testDataF = finaldataPreparation(testDataF)
+featuresDrop = pickle.load(open(os.path.join(
+    currentPath, 'featuresDrop.p'), 'rb'))
+testDataF = testDataF.drop(
+    featuresDrop, axis=1
 )
+survived = lastModel.predict(testDataF)
 
-model2.fit(X_train, y_train)
-print(max(cross_val_score(model2, X_train, y_train, scoring='accuracy', cv=3)))
-
-y_predict = model2.predict(X_test)
-print(accuracy_score(y_predict, y_test))
-
-featureImportance = pd.DataFrame(
-    model2.feature_importances_, index=X_train.columns, columns=['importance'])
-featureImportance.sort_values(by="importance", ascending=False, inplace=True)
-print('\n', tabulate(featureImportance, headers='keys'), '\n')
+finalSurvived = pd.DataFrame(testDataF['PassengerId'])
+finalSurvived['Survived'] = survived
+finalSurvived.to_csv(os.path.join(
+    currentPath, 'finalSurvived.csv'), sep=',', index=False)
