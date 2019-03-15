@@ -179,27 +179,15 @@ def tuneHyperparams(finalModel, X_train, y_train):
     pickle.dump(bestParams, open(os.path.join(
         currentPath, 'bestParams.p'), 'wb')) """
 
-
-    # Number of trees in random forest
-    n_estimators = np.arange(200, 800, dtype=int, step=100)
-    # Number of features to consider at every split
-    max_features = ['auto', 'sqrt']
-    # Maximum number of levels in tree
-    max_depth = np.arange(1, 3, dtype=int)
-    max_depth = np.append(max_depth, None)
-    # Minimum number of samples required to split a node
+    n_estimators = np.arange(450, 550, dtype=int, step=50)
     min_samples_split = np.arange(2, 5, dtype=int)
-    # Minimum number of samples required at each leaf node
     min_samples_leaf = np.arange(1, 5, dtype=int)
-    # Method of selecting samples for training each tree
-    bootstrap = [True, False]
     
-    params = {'n_estimators': n_estimators,
-              'max_features': max_features,
-              'max_depth': max_depth,
-              'min_samples_split': min_samples_split,
-              'min_samples_leaf': min_samples_leaf,
-              'bootstrap': bootstrap}
+    params = {
+        'n_estimators': n_estimators,
+        'min_samples_split': min_samples_split,
+        'min_samples_leaf': min_samples_leaf,
+        }
 
     randomS = GridSearchCV(estimator = finalModel, param_grid = params, cv = 2, n_jobs = -1, verbose=1)
     
@@ -222,11 +210,12 @@ def trainModel(finalData):
     y_test = test.pop('Survived')
     X_test = test
 
-    finalModel = RandomForestRegressor()
+    finalModel = RandomForestRegressor(
+        max_depth=None, max_features='auto', bootstrap=True)
 
     finalModel.fit(X_train, y_train)
-    print('Cross validation accuracy for untuned: \t', max(
-        cross_val_score(finalModel, X_train, y_train, scoring='neg_mean_squared_error', cv=3)))
+    print('Cross validation score for untuned: \t', max(np.sqrt(-
+        cross_val_score(finalModel, X_train, y_train, scoring='neg_mean_squared_error', cv=3))))
 
     if input('Do you wish to tune the hyperparameters [y/n] \t') == 'y':
         bestParams = tuneHyperparams(finalModel, X_train, y_train)
@@ -241,13 +230,13 @@ def trainModel(finalData):
             bestParams = tuneHyperparams(finalModel, X_train, y_train)
             print(bestParams)
 
-    finalModel = RandomForestRegressor(**bestParams)
+    finalModel = RandomForestClassifier()  # (**bestParams)
 
     adaFinalModel2 = AdaBoostClassifier(base_estimator=finalModel)
 
     adaFinalModel2.fit(X_train, y_train)
-    print('Cross validation accuracy for tuned: \t', max(
-        cross_val_score(adaFinalModel2, X_train, y_train, scoring='neg_mean_squared_error', cv=3)))
+    print('Cross validation score for tuned: \t', max(np.sqrt(-
+        cross_val_score(adaFinalModel2, X_train, y_train, scoring='neg_mean_squared_error', cv=3))))
 
     y_predict = adaFinalModel2.predict(X_test)
     print('Prediction accuracy for tuned: \t',
@@ -279,8 +268,8 @@ def trainModel(finalData):
     Xtest = lTest
 
     adaFinalModel2.fit(Xtrain, yTrain)
-    print('Cross validation accuracy for final: \t', max(
-        cross_val_score(adaFinalModel2, Xtrain, yTrain, scoring='neg_mean_squared_error', cv=3)))
+    print('Cross validation score for final: \t', max(np.sqrt(-
+        cross_val_score(adaFinalModel2, Xtrain, yTrain, scoring='neg_mean_squared_error', cv=3))))
 
     y_predict = adaFinalModel2.predict(Xtest)
     print('Prediction accuracy for final: \t',
@@ -340,6 +329,7 @@ def chooseModel(data, drop=False):
     scoreFrame.to_pickle(os.path.join(
         currentPath, 'scoreFrame.p'))
     print(tabulate(scoreFrame, headers='keys'))
+
 
 if os.path.isfile(os.path.join(currentPath, 'allData.csv')):
     if input('Data already prepared for level prediction. Redo? [y/n] \t') == 'y':
