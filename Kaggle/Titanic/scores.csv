@@ -1,0 +1,43 @@
+RandomForestRegressor score is: [1.08975271 1.37592541 1.26741527 1.54003484 1.32060592]
+RandomForestRegressor score mean is: 1.3187468310688968
+RandomForestRegressor score std is: 0.14650219488703561
+LinearRegression score is: [1.15778298 1.23701065 1.17205032 1.26952902 1.13965744]
+LinearRegression score mean is: 1.195206080501856
+LinearRegression score std is: 0.04958598690757255
+Ridge score is: [1.16192536 1.23698089 1.170567   1.26891238 1.134923  ]
+Ridge score mean is: 1.1946617267340804
+Ridge score std is: 0.0500499996500784
+Lasso score is: [1.61941876 1.41624467 1.28482166 1.4339185  1.23817928]
+Lasso score mean is: 1.3985165762635658
+Lasso score std is: 0.13341659276443854
+MultiTaskLasso score is: [1.61941876 1.41624467 1.28482166 1.4339185  1.23817928]
+MultiTaskLasso score mean is: 1.3985165762635658
+MultiTaskLasso score std is: 0.13341659276443854
+ElasticNet score is: [1.61912039 1.41617246 1.28429049 1.43514608 1.23840779]
+ElasticNet score mean is: 1.3986274406664974
+ElasticNet score std is: 0.13341803051799994
+MultiTaskElasticNet score is: [1.61912039 1.41617246 1.28429049 1.43514608 1.23840779]
+MultiTaskElasticNet score mean is: 1.3986274406664974
+MultiTaskElasticNet score std is: 0.13341803051799994
+Lars score is: [1.15778298 1.23701065 1.17205032 1.26952902 1.13965744]
+Lars score mean is: 1.1952060805018554
+Lars score std is: 0.04958598690757273
+LassoLars score is: [1.71328045 1.47474063 1.3575141  1.45772345 1.34801063]
+LassoLars score mean is: 1.4702538542525425
+LassoLars score std is: 0.13182771159750076
+OrthogonalMatchingPursuit score is: [1.1234371  1.24538079 1.16046899 1.25664272 1.15947871]
+OrthogonalMatchingPursuit score mean is: 1.1890816600015774
+OrthogonalMatchingPursuit score std is: 0.052418157040855486
+BayesianRidge score is: [1.18477472 1.23801937 1.16732154 1.26876356 1.12378648]
+BayesianRidge score mean is: 1.196533133015314
+BayesianRidge score std is: 0.051423721511592684
+ARDRegression score is: [1.13493651 1.24406951 1.15605914 1.25679297 1.15226127]
+ARDRegression score mean is: 1.1888238794696033
+ARDRegression score std is: 0.05096288435096792
+LogisticRegression score is: [1.49240501 1.42241197 1.32517831 1.4500221  1.77063128]
+LogisticRegression score mean is: 1.4921297367256905
+LogisticRegression score std is: 0.1497127808810396
+"SGDRegressor score is: [1.55401854e+14 3.30321279e+14 1.25260595e+14 2.81967075e+14
+ 2.29574129e+14]"
+SGDRegressor score mean is: 224504986566967.1
+SGDRegressor score std is: 76353608557960.39

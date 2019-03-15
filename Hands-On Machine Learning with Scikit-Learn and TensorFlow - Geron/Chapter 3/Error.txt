@@ -1,0 +1,1 @@
+-bash: /var/spool/PBS/mom_priv/jobs/181363.hpc1.hpc.SC: /bin/bash^M: bad interpreter: No such file or directory
