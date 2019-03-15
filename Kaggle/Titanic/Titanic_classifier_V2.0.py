@@ -9,10 +9,15 @@ import pickle
 import csv
 
 from tabulate import tabulate
-from sklearn.preprocessing import OneHotEncoder
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
-from sklearn.model_selection import cross_val_score, train_test_split
+from sklearn.model_selection import cross_val_score, train_test_split, GridSearchCV
 from sklearn.metrics import accuracy_score
+from sklearn.pipeline import Pipeline
+from sklearn.svm import SVC
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.naive_bayes import GaussianNB
+from sklearn.neural_network import MLPClassifier
 from hyperopt import hp, tpe, fmin, STATUS_OK, Trials
 from hyperopt.pyll.base import scope
 from hyperopt.pyll.stochastic import sample
@@ -147,7 +152,7 @@ def finaldataPreparation(data):
 
 
 def tuneHyperparams(finalModel, X_train, y_train):
-    params = {
+    """params = {
         'n_estimators': hp.choice('n_estimators', np.arange(1, 1001, dtype=int)),
         'min_samples_split': hp.choice('min_samples_split', np.arange(1, 10, dtype=int)),
         'max_features': hp.uniform('max_features', 0.1, 1),
@@ -172,9 +177,166 @@ def tuneHyperparams(finalModel, X_train, y_train):
         trials=trials
     )
     pickle.dump(bestParams, open(os.path.join(
-        currentPath, 'bestParams.p'), 'wb'))
+        currentPath, 'bestParams.p'), 'wb')) """
+
+
+    # Number of trees in random forest
+    n_estimators = np.arange(1, 1001, dtype=int)
+    # Number of features to consider at every split
+    max_features = ['auto', 'sqrt']
+    # Maximum number of levels in tree
+    max_depth = np.arange(1, 6, dtype=int)
+    max_depth = np.append(max_depth, None)
+    # Minimum number of samples required to split a node
+    min_samples_split = np.arange(2, 11, dtype=int)
+    # Minimum number of samples required at each leaf node
+    min_samples_leaf = np.arange(1, 11, dtype=int)
+    # Method of selecting samples for training each tree
+    bootstrap = [True, False]
+    
+    params = {'n_estimators': n_estimators,
+              'max_features': max_features,
+              'max_depth': max_depth,
+              'min_samples_split': min_samples_split,
+              'min_samples_leaf': min_samples_leaf,
+              'bootstrap': bootstrap}
+
+    randomS = GridSearchCV(estimator = finalModel, param_grid = params, cv = 3, n_jobs = -1, verbose=1)
+    
+    randomS.fit(X_train, y_train)
+
+    bestParams = randomS.best_params_
+
     return bestParams
 
+
+def trainModel(finalData):
+    finalData = finaldataPreparation(finalData)
+    # finalData.pop('PassengerId')
+
+    train, test = train_test_split(finalData, stratify=finalData['Sex'])
+
+    y_train = train.pop('Survived')
+    X_train = train
+
+    y_test = test.pop('Survived')
+    X_test = test
+
+    finalModel = RandomForestClassifier()
+
+    finalModel.fit(X_train, y_train)
+    print('Cross validation accuracy for untuned: \t', max(
+        cross_val_score(finalModel, X_train, y_train, scoring='accuracy', cv=3)))
+
+    if input('Do you wish to tune the hyperparameters [y/n] \t') == 'y':
+        bestParams = tuneHyperparams(finalModel, X_train, y_train)
+        print(bestParams)
+    else:
+        try:
+            bestParams = pickle.load(
+                open(os.path.join(currentPath, 'bestParams.p'), 'rb'))
+            print(bestParams)
+        except:
+            print('/n No tuning done. Tuning now...')
+            bestParams = tuneHyperparams(finalModel, X_train, y_train)
+            print(bestParams)
+
+    model2 = RandomForestClassifier(**bestParams)
+
+    model2.fit(X_train, y_train)
+    print('Cross validation accuracy for tuned: \t', max(
+        cross_val_score(model2, X_train, y_train, scoring='accuracy', cv=3)))
+
+    y_predict = model2.predict(X_test)
+    print('Prediction accuracy for tuned: \t',
+          accuracy_score(y_predict, y_test))
+
+    featureImportance = pd.DataFrame(
+        model2.feature_importances_, index=X_train.columns, columns=['importance'])
+    featureImportance.sort_values(
+        by="importance", ascending=False, inplace=True)
+    print('\n', tabulate(featureImportance, headers='keys'), '\n')
+
+    """ featuresDrop = featureImportance[featureImportance['importance'] < 0.02]
+    featuresDrop = featuresDrop.index.tolist()
+    pickle.dump(featuresDrop, open(os.path.join(
+        currentPath, 'featuresDrop.p'), 'wb'))
+
+    lastTest = finalData.drop(
+        featuresDrop, axis = 1) """
+
+    lastTest = finalData
+
+    lTrain, lTest = train_test_split(
+        lastTest, stratify=lastTest['Sex'])
+
+    yTrain = lTrain.pop('Survived')
+    Xtrain = lTrain
+
+    yTest = lTest.pop('Survived')
+    Xtest = lTest
+
+    model2.fit(Xtrain, yTrain)
+    print('Cross validation accuracy for final: \t', max(
+        cross_val_score(model2, Xtrain, yTrain, scoring='accuracy', cv=3)))
+
+    y_predict = model2.predict(Xtest)
+    print('Prediction accuracy for final: \t',
+          accuracy_score(y_predict, yTest))
+
+    pickle.dump(model2, open(os.path.join(
+        currentPath, 'finalModel.p'), 'wb'))
+
+def chooseModel(data, drop=False):
+    data = finaldataPreparation(data)
+
+    if drop:
+        featuresDrop = pickle.load(open(os.path.join(
+            currentPath, 'featuresDrop.p'), 'rb'))
+        data = data.drop(
+            featuresDrop, axis=1
+        )
+        
+    train, test = train_test_split(data, stratify=data['Sex'])
+
+    y_train = train.pop('Survived')
+    X_train = train
+
+    global modellist
+    modellist = (
+        RandomForestRegressor(),
+        Pipeline((
+            ('scaler', StandardScaler()),
+            ('SVC', SVC(kernel='poly')),
+        )),
+        KNeighborsClassifier(),
+        GaussianNB(),
+        MLPClassifier(solver='adam', max_iter=1000),
+    )
+
+    models = (model.fit(X_train, y_train) for model in modellist)
+    scoreTable = []
+    scoreList = []
+
+    for model in models:
+        name = type(model).__name__
+        score = np.sqrt(-cross_val_score(model, X_train, y_train,
+                                         scoring='neg_mean_squared_error', cv=5, n_jobs=-1, verbose=0))
+        scoreEntry = str(name + ' score is: ' + str(score))
+        scoreTable.append(scoreEntry)
+        scoreEntry = str(name + ' score mean is: ' + str(score.mean()))
+        scoreTable.append(scoreEntry)
+        scoreEntry = str(name + ' score std is: ' + str(score.std()))
+        scoreTable.append(scoreEntry)
+        scoreList = scoreList + ([[str(name), str(score.mean()), str(score.std())]])
+
+    scoreFrame = pd.DataFrame(
+        scoreList, columns=['Name', 'Mean', 'Standard Deviation'])
+    scoreFrame.sort_values(['Mean', 'Standard Deviation'], ascending=[
+                           True, False], inplace=True, )
+    scoreFrame.to_pickle(os.path.join(
+        currentPath, 'scoreFrame.p'))
+    print(tabulate(scoreFrame, headers='keys'))
 
 if os.path.isfile(os.path.join(currentPath, 'allData.csv')):
     if input('Data already prepared for level prediction. Redo? [y/n] \t') == 'y':
@@ -269,164 +431,31 @@ else:
 
 
 if os.path.isfile(os.path.join(currentPath, 'finalModel.p')):
-    if input('\n Model already exists. Remake? [y/n] \t') == 'y':
-        finalData = finaldataPreparation(trainDataF)
-
-        train, test = train_test_split(finalData, stratify=finalData['Sex'])
-
-        y_train = train.pop('Survived')
-        X_train = train
-
-        y_test = test.pop('Survived')
-        X_test = test
-
-        finalModel = RandomForestClassifier()
-
-        finalModel.fit(X_train, y_train)
-        print('Cross validation accuracy for untuned: \t', max(
-            cross_val_score(finalModel, X_train, y_train, scoring='accuracy', cv=3)))
-
-        if input('\n Do you wish to tune the hyperparameters [y/n] \t') == 'y':
-            bestParams = tuneHyperparams(finalModel, X_train, y_train)
-            print(bestParams)
-        else:
-            try:
-                bestParams = pickle.load(
-                    open(os.path.join(currentPath, 'bestParams.p'), 'rb'))
-                print(bestParams)
-            except:
-                print('/n No tuning done. Tuning now...')
-                bestParams = tuneHyperparams(finalModel, X_train, y_train)
-                print(bestParams)
-
-        model2 = RandomForestClassifier(**bestParams)
-
-        model2.fit(X_train, y_train)
-        print('Cross validation accuracy for tuned: \t', max(
-            cross_val_score(model2, X_train, y_train, scoring='accuracy', cv=3)))
-
-        y_predict = model2.predict(X_test)
-        print('Prediction accuracy for tuned: \t',
-              accuracy_score(y_predict, y_test))
-
-        featureImportance = pd.DataFrame(
-            model2.feature_importances_, index=X_train.columns, columns=['importance'])
-        featureImportance.sort_values(
-            by="importance", ascending=False, inplace=True)
-        print('\n', tabulate(featureImportance, headers='keys'), '\n')
-
-        featuresDrop = featureImportance[featureImportance['importance'] < 0.02]
-        featuresDrop = featuresDrop.index.tolist()
-        pickle.dump(featuresDrop, open(os.path.join(
-            currentPath, 'featuresDrop.p'), 'wb'))
-
-        lastTest = finalData.drop(
-            featuresDrop, axis=1)
-
-        lTrain, lTest = train_test_split(
-            lastTest, test_size=0.1, stratify=lastTest['Sex'])
-
-        yTrain = lTrain.pop('Survived')
-        Xtrain = lTrain
-
-        yTest = lTest.pop('Survived')
-        Xtest = lTest
-
-        model2.fit(Xtrain, yTrain)
-        print('Cross validation accuracy for final: \t', max(
-            cross_val_score(model2, Xtrain, yTrain, scoring='accuracy', cv=3)))
-
-        y_predict = model2.predict(Xtest)
-        print('Prediction accuracy for final: \t',
-              accuracy_score(y_predict, yTest))
-
-        pickle.dump(model2, open(os.path.join(
-            currentPath, 'finalModel.p'), 'wb'))
+    if input('Model already exists. Remake? [y/n] \t') == 'y':
+        trainModel(trainDataF)
     else:
         lastModel = pickle.load(
             open(os.path.join(currentPath, 'finalModel.p'), 'rb'))
 else:
-    finalData = finaldataPreparation(trainDataF)
+    trainModel(trainDataF)
 
-    train, test = train_test_split(finalData, stratify=finalData['Sex'])
+lastModel = pickle.load(
+    open(os.path.join(currentPath, 'finalModel.p'), 'rb'))
 
-    y_train = train.pop('Survived')
-    X_train = train
+# chooseModel(trainDataF, True)
 
-    y_test = test.pop('Survived')
-    X_test = test
-
-    finalModel = RandomForestClassifier()
-
-    finalModel.fit(X_train, y_train)
-    print('Cross validation accuracy for untuned: \t', max(
-        cross_val_score(finalModel, X_train, y_train, scoring='accuracy', cv=3)))
-
-    if input('\n Do you wish to tune the hyperparameters [y/n] \t') == 'y':
-        bestParams = tuneHyperparams(finalModel, X_train, y_train)
-        print(bestParams)
-    else:
-        try:
-            bestParams = pickle.load(
-                open(os.path.join(currentPath, 'bestParams.p'), 'rb'))
-            print(bestParams)
-        except:
-            print('/n No tuning done. Tuning now...')
-            bestParams = tuneHyperparams(finalModel, X_train, y_train)
-            print(bestParams)
-
-    model2 = RandomForestClassifier(**bestParams)
-
-    model2.fit(X_train, y_train)
-    print('Cross validation accuracy for tuned: \t', max(
-        cross_val_score(model2, X_train, y_train, scoring='accuracy', cv=3)))
-
-    y_predict = model2.predict(X_test)
-    print('Prediction accuracy for tuned: \t',
-          accuracy_score(y_predict, y_test))
-
-    featureImportance = pd.DataFrame(
-        model2.feature_importances_, index=X_train.columns, columns=['importance'])
-    featureImportance.sort_values(
-        by="importance", ascending=False, inplace=True)
-    print('\n', tabulate(featureImportance, headers='keys'), '\n')
-
-    featuresDrop = featureImportance[featureImportance['importance'] < 0.02]
-    featuresDrop = featuresDrop.index.tolist()
-
-    lastTest = finalData.drop(
-        featuresDrop, axis=1)
-
-    lTrain, lTest = train_test_split(
-        lastTest, test_size=0.1, stratify=lastTest['Sex'])
-
-    yTrain = lTrain.pop('Survived')
-    Xtrain = lTrain
-
-    yTest = lTest.pop('Survived')
-    Xtest = lTest
-
-    model2.fit(Xtrain, yTrain)
-    print('Cross validation accuracy for final: \t', max(
-        cross_val_score(model2, Xtrain, yTrain, scoring='accuracy', cv=3)))
-
-    y_predict = model2.predict(Xtest)
-    print('Prediction accuracy for final: \t',
-          accuracy_score(y_predict, yTest))
-
-    pickle.dump(model2, open(os.path.join(
-        currentPath, 'finalModel.p'), 'wb'))
-
-testDataF.pop('Survived')
-testDataF = finaldataPreparation(testDataF)
+""" testDataF = finaldataPreparation(testDataF)
 featuresDrop = pickle.load(open(os.path.join(
     currentPath, 'featuresDrop.p'), 'rb'))
 testDataF = testDataF.drop(
     featuresDrop, axis=1
 )
+# testDataF = testDataF.drop(
+    # ['PassengerId', 'Survived'], axis=1)
+testDataF = testDataF.drop('Survived', axis=1)
 survived = lastModel.predict(testDataF)
 
-finalSurvived = pd.DataFrame(testDataF['PassengerId'])
+finalSurvived = pd.DataFrame(testData['PassengerId'])
 finalSurvived['Survived'] = survived
 finalSurvived.to_csv(os.path.join(
-    currentPath, 'finalSurvived.csv'), sep=',', index=False)
+    currentPath, 'submission.csv'), sep=',', index=False) """
