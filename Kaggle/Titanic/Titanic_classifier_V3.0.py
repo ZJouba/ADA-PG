@@ -102,7 +102,7 @@ def dataManipulate(allData):
 
 
 def tuneHyperparams(finalModel, X_train, y_train):
-
+    global params
     params = {
         'activation': hp.choice('activation', ['identity', 'logistic', 'tanh', 'relu']),
         'solver': hp.choice('solver', ['lbfgs', 'sgd', 'adam']),
@@ -203,7 +203,10 @@ def trainModel(finalData):
             bestParams = tuneHyperparams(finalModel, X_train, y_train)
             print(bestParams)
 
-    finalModel = MLPRegressor(**bestParams)
+    # bestParams = space_eval(params, bestParams)
+
+    finalModel = MLPRegressor(
+        alpha=1e-05, hidden_layer_sizes=(50, 50), activation='tanh', learning_rate='adaptive', random_state=3, solver='sgd')
 
     finalModel.fit(X_train, y_train)
     print('\n Cross validation score for tuned: \t', max(np.sqrt(-
@@ -213,7 +216,7 @@ def trainModel(finalData):
     print('Prediction accuracy for tuned: \t \t',
           mean_squared_error(y_predict, y_test))
 
-    adaFinalModel2 = AdaBoostRegressor(
+    """ adaFinalModel2 = AdaBoostRegressor(
         base_estimator=finalModel, n_estimators=200)
 
     # finalParams = tuneFinal(adaFinalModel2, X_train, y_train)
@@ -227,9 +230,9 @@ def trainModel(finalData):
 
     y_predict = adaFinalModel2.predict(X_test)
     print('Prediction accuracy for boosted: \t \t',
-          mean_squared_error(y_predict, y_test))
+          mean_squared_error(y_predict, y_test)) """
 
-    pickle.dump(adaFinalModel2, open(
+    pickle.dump(finalModel, open(
         os.path.join(currentPath, 'finalModel.p'), 'wb'))
 
 
