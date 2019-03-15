@@ -181,16 +181,16 @@ def tuneHyperparams(finalModel, X_train, y_train):
 
 
     # Number of trees in random forest
-    n_estimators = np.arange(1, 1001, dtype=int, step=10)
+    n_estimators = np.arange(200, 800, dtype=int, step=100)
     # Number of features to consider at every split
     max_features = ['auto', 'sqrt']
     # Maximum number of levels in tree
-    max_depth = np.arange(1, 6, dtype=int)
+    max_depth = np.arange(1, 3, dtype=int)
     max_depth = np.append(max_depth, None)
     # Minimum number of samples required to split a node
-    min_samples_split = np.arange(2, 11, dtype=int)
+    min_samples_split = np.arange(2, 5, dtype=int)
     # Minimum number of samples required at each leaf node
-    min_samples_leaf = np.arange(1, 11, dtype=int)
+    min_samples_leaf = np.arange(1, 5, dtype=int)
     # Method of selecting samples for training each tree
     bootstrap = [True, False]
     
@@ -201,7 +201,7 @@ def tuneHyperparams(finalModel, X_train, y_train):
               'min_samples_leaf': min_samples_leaf,
               'bootstrap': bootstrap}
 
-    randomS = GridSearchCV(estimator = finalModel, param_grid = params, cv = 3, n_jobs = -1, verbose=1)
+    randomS = GridSearchCV(estimator = finalModel, param_grid = params, cv = 2, n_jobs = -1, verbose=1)
     
     randomS.fit(X_train, y_train)
 
@@ -247,7 +247,7 @@ def trainModel(finalData):
 
     adaFinalModel2.fit(X_train, y_train)
     print('Cross validation accuracy for tuned: \t', max(
-        cross_val_score(model2, X_train, y_train, scoring='neg_mean_squared_error', cv=3)))
+        cross_val_score(adaFinalModel2, X_train, y_train, scoring='neg_mean_squared_error', cv=3)))
 
     y_predict = adaFinalModel2.predict(X_test)
     print('Prediction accuracy for tuned: \t',
@@ -280,7 +280,7 @@ def trainModel(finalData):
 
     adaFinalModel2.fit(Xtrain, yTrain)
     print('Cross validation accuracy for final: \t', max(
-        cross_val_score(model2, Xtrain, yTrain, scoring='neg_mean_squared_error', cv=3)))
+        cross_val_score(adaFinalModel2, Xtrain, yTrain, scoring='neg_mean_squared_error', cv=3)))
 
     y_predict = adaFinalModel2.predict(Xtest)
     print('Prediction accuracy for final: \t',
