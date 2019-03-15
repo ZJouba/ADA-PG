@@ -10,7 +10,7 @@ import csv
 
 from tabulate import tabulate
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
-from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
+from sklearn.ensemble import RandomForestRegressor, AdaBoostClassifier, RandomForestClassifier
 from sklearn.model_selection import cross_val_score, train_test_split, GridSearchCV
 from sklearn.metrics import accuracy_score
 from sklearn.pipeline import Pipeline
@@ -181,7 +181,7 @@ def tuneHyperparams(finalModel, X_train, y_train):
 
 
     # Number of trees in random forest
-    n_estimators = np.arange(1, 1001, dtype=int)
+    n_estimators = np.arange(1, 1001, dtype=int, step=10)
     # Number of features to consider at every split
     max_features = ['auto', 'sqrt']
     # Maximum number of levels in tree
@@ -222,11 +222,11 @@ def trainModel(finalData):
     y_test = test.pop('Survived')
     X_test = test
 
-    finalModel = RandomForestClassifier()
+    finalModel = RandomForestRegressor()
 
     finalModel.fit(X_train, y_train)
     print('Cross validation accuracy for untuned: \t', max(
-        cross_val_score(finalModel, X_train, y_train, scoring='accuracy', cv=3)))
+        cross_val_score(finalModel, X_train, y_train, scoring='neg_mean_squared_error', cv=3)))
 
     if input('Do you wish to tune the hyperparameters [y/n] \t') == 'y':
         bestParams = tuneHyperparams(finalModel, X_train, y_train)
@@ -241,18 +241,20 @@ def trainModel(finalData):
             bestParams = tuneHyperparams(finalModel, X_train, y_train)
             print(bestParams)
 
-    model2 = RandomForestClassifier(**bestParams)
+    finalModel = RandomForestRegressor(**bestParams)
 
-    model2.fit(X_train, y_train)
+    adaFinalModel2 = AdaBoostClassifier(base_estimator=finalModel)
+
+    adaFinalModel2.fit(X_train, y_train)
     print('Cross validation accuracy for tuned: \t', max(
-        cross_val_score(model2, X_train, y_train, scoring='accuracy', cv=3)))
+        cross_val_score(model2, X_train, y_train, scoring='neg_mean_squared_error', cv=3)))
 
-    y_predict = model2.predict(X_test)
+    y_predict = adaFinalModel2.predict(X_test)
     print('Prediction accuracy for tuned: \t',
           accuracy_score(y_predict, y_test))
 
     featureImportance = pd.DataFrame(
-        model2.feature_importances_, index=X_train.columns, columns=['importance'])
+        adaFinalModel2.feature_importances_, index=X_train.columns, columns=['importance'])
     featureImportance.sort_values(
         by="importance", ascending=False, inplace=True)
     print('\n', tabulate(featureImportance, headers='keys'), '\n')
@@ -276,16 +278,17 @@ def trainModel(finalData):
     yTest = lTest.pop('Survived')
     Xtest = lTest
 
-    model2.fit(Xtrain, yTrain)
+    adaFinalModel2.fit(Xtrain, yTrain)
     print('Cross validation accuracy for final: \t', max(
-        cross_val_score(model2, Xtrain, yTrain, scoring='accuracy', cv=3)))
+        cross_val_score(model2, Xtrain, yTrain, scoring='neg_mean_squared_error', cv=3)))
 
-    y_predict = model2.predict(Xtest)
+    y_predict = adaFinalModel2.predict(Xtest)
     print('Prediction accuracy for final: \t',
           accuracy_score(y_predict, yTest))
 
-    pickle.dump(model2, open(os.path.join(
+    pickle.dump(adaFinalModel2, open(os.path.join(
         currentPath, 'finalModel.p'), 'wb'))
+
 
 def chooseModel(data, drop=False):
     data = finaldataPreparation(data)
@@ -304,7 +307,7 @@ def chooseModel(data, drop=False):
 
     global modellist
     modellist = (
-        RandomForestRegressor(),
+        RandomForestClassifier(),
         Pipeline((
             ('scaler', StandardScaler()),
             ('SVC', SVC(kernel='poly')),
@@ -442,7 +445,7 @@ else:
 lastModel = pickle.load(
     open(os.path.join(currentPath, 'finalModel.p'), 'rb'))
 
-# chooseModel(trainDataF, True)
+# chooseModel(trainDataF, False)
 
 """ testDataF = finaldataPreparation(testDataF)
 featuresDrop = pickle.load(open(os.path.join(
