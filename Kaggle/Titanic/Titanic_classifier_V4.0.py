@@ -12,6 +12,7 @@ from sklearn.model_selection import cross_val_score, train_test_split, GridSearc
 from sklearn.metrics import mean_squared_error, accuracy_score, confusion_matrix
 from sklearn.neural_network import MLPClassifier, MLPRegressor
 from sklearn.linear_model import LogisticRegression, LinearRegression
+from sklearn.svm import SVC
 from hyperopt import hp, tpe, fmin, STATUS_OK, Trials, space_eval
 from hyperopt.pyll.base import scope
 from hyperopt.pyll.stochastic import sample
@@ -173,11 +174,44 @@ def trainModel(finalData):
     y_test = test.pop('Survived')
     X_test = test
 
-    A = RandomForestClassifier(n_estimators=1000)
-    GB = GradientBoostingClassifier()
+    A = RandomForestClassifier(
+        criterion='gini',
+        n_estimators=700,
+        min_samples_split=10,
+        min_samples_leaf=1,
+        max_features='auto',
+        oob_score=True,
+    )
+    B = GradientBoostingClassifier(
+        criterion='friedman_mse',
+        learning_rate=0.075,
+        loss='deviance',
+        max_depth=3,
+        max_features='log2',
+        min_samples_leaf=0.1,
+        min_samples_split=0.3545454545454546,
+        n_estimators=10,
+        subsample=1.0
+    )
+    C = LogisticRegression(
+        C=5.1000100000000002,
+        class_weight=None,
+        dual=False,
+        fit_intercept=True,
+        intercept_scaling=1,
+        max_iter=100,
+        multi_class='ovr',
+        n_jobs=1,
+        penalty='l2',
+        solver='liblinear',
+        tol=0.0001,
+        warm_start=False
+    )
+    D = MLPClassifier()
+
     finalModel = VotingClassifier(
-        estimators=[('rf', A), ('gb', GB)],
-        voting='soft'
+        estimators=[('A', A), ('B', B), ('C', C), ('D', D)],
+        voting='soft',
     )
 
     finalModel.fit(X_train, y_train)
@@ -280,8 +314,9 @@ def chooseModel(data):
 
     modellist = (
         RandomForestClassifier(),
-        MLPClassifier(),
         GradientBoostingClassifier(),
+        LogisticRegression(),
+        MLPClassifier(),
     )
 
     models = (model.fit(X_train, y_train) for model in modellist)
