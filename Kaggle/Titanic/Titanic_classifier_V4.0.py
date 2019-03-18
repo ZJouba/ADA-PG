@@ -36,7 +36,7 @@ allData = trainData.append(testData, ignore_index=True)
 
 def dataManipulate(allData):
     import re
-    from sklearn.preprocessing import OneHotEncoder, StandardScaler, LabelEncoder, MinMaxScaler, Imputer
+    from sklearn.preprocessing import OneHotEncoder, StandardScaler, LabelEncoder, MinMaxScaler, Imputer, LabelBinarizer
 
     def titles(name):
         search = re.search(r' ([A-Za-z]+)\.', name)
@@ -75,7 +75,7 @@ def dataManipulate(allData):
 
     allData['Embarked'] = allData['Embarked'].fillna(embarkedMost)
 
-    encoder = OneHotEncoder(sparse=False)
+    encoder = LabelBinarizer()
     encodedSex = encoder.fit_transform(allData[['Sex']])
     allData['Sex'] = encodedSex
     encoder1 = OneHotEncoder(sparse=False)
@@ -84,9 +84,12 @@ def dataManipulate(allData):
     encoder2 = OneHotEncoder(sparse=False)
     encodedTitle = encoder2.fit_transform(allData[['Title']])
     allData['Title'] = encodedTitle
-    encoder3 = OneHotEncoder(sparse=False, categories='auto')
+    encoder3 = OneHotEncoder(sparse=False)  # , categories='auto')
     encodedLevel = encoder3.fit_transform(allData[['Cabin']])
     allData['Cabin'] = encodedLevel
+    encoder4 = OneHotEncoder(sparse=False)
+    encodedLevel = encoder4.fit_transform(allData[['Pclass']])
+    allData['Pclass'] = encodedLevel
 
     scaler = StandardScaler()
 
@@ -175,59 +178,59 @@ def trainModel(finalData):
     X_test = test
 
     A = RandomForestClassifier(
-        criterion='gini',
-        n_estimators=700,
-        min_samples_split=10,
-        min_samples_leaf=1,
-        max_features='auto',
-        oob_score=True,
+        # criterion='gini',
+        # n_estimators=700,
+        # min_samples_split=10,
+        # min_samples_leaf=1,
+        # max_features='auto',
+        # oob_score=True,
     )
     B = GradientBoostingClassifier(
-        criterion='friedman_mse',
-        learning_rate=0.075,
-        loss='deviance',
-        max_depth=3,
-        max_features='log2',
-        min_samples_leaf=0.1,
-        min_samples_split=0.3545454545454546,
-        n_estimators=10,
-        subsample=1.0
+        # criterion='friedman_mse',
+        # learning_rate=0.075,
+        # loss='deviance',
+        # max_depth=3,
+        # max_features='log2',
+        # min_samples_leaf=0.1,
+        # min_samples_split=0.3545454545454546,
+        # n_estimators=10,
+        # subsample=1.0
     )
     C = LogisticRegression(
-        C=5.1000100000000002,
-        class_weight=None,
-        dual=False,
-        fit_intercept=True,
-        intercept_scaling=1,
-        max_iter=100,
-        multi_class='ovr',
-        n_jobs=1,
-        penalty='l2',
-        solver='liblinear',
-        tol=0.0001,
-        warm_start=False
+        # C=5.1000100000000002,
+        # class_weight=None,
+        # dual=False,
+        # fit_intercept=True,
+        # intercept_scaling=1,
+        # max_iter=100,
+        # multi_class='ovr',
+        # n_jobs=1,
+        # penalty='l2',
+        # solver='liblinear',
+        # tol=0.0001,
+        # warm_start=False
     )
     D = MLPClassifier(
-        activation='relu',
-        alpha=1e-05,
-        batch_size='auto',
-        beta_1=0.9,
-        beta_2=0.999,
-        early_stopping=False,
-        epsilon=1e-08,
-        hidden_layer_sizes=(50, 50),
-        learning_rate='constant',
-        learning_rate_init=0.001,
-        max_iter=200,
-        momentum=0.9,
-        nesterovs_momentum=True,
-        power_t=0.5,
-        random_state=1,
-        shuffle=True,
-        solver='lbfgs',
-        tol=0.0001,
-        validation_fraction=0.1,
-        warm_start=False
+        # activation='relu',
+        # alpha=1e-05,
+        # batch_size='auto',
+        # beta_1=0.9,
+        # beta_2=0.999,
+        # early_stopping=False,
+        # epsilon=1e-08,
+        # hidden_layer_sizes=(50, 50),
+        # learning_rate='constant',
+        # learning_rate_init=0.001,
+        # max_iter=200,
+        # momentum=0.9,
+        # nesterovs_momentum=True,
+        # power_t=0.5,
+        # random_state=1,
+        # shuffle=True,
+        # solver='lbfgs',
+        # tol=0.0001,
+        # validation_fraction=0.1,
+        # warm_start=False
     )
 
     finalModel = VotingClassifier(
@@ -366,7 +369,8 @@ def chooseModel(data):
 
 allData = dataManipulate(allData)
 allData = pickle.load(open(os.path.join(currentPath, 'preparedData.p'), 'rb'))
-allData = allData.drop(['Ticket', 'Name', 'AgeGroups'], axis=1)
+allData = allData.drop(
+    ['PassengerId', 'Ticket', 'Name', 'AgeGroups', 'Cabin'], axis=1)
 trainDataF = allData[:len(trainData)]
 testDataF = allData.iloc[len(trainData):]
 trainModel(trainDataF)
