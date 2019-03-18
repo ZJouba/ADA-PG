@@ -3,6 +3,8 @@ import pandas as pd
 import numpy as np
 import pickle
 import warnings
+import subprocess
+import matplotlib.pyplot as plt
 
 from tabulate import tabulate
 from sklearn.ensemble import RandomForestRegressor, AdaBoostRegressor, RandomForestClassifier
@@ -13,6 +15,8 @@ from sklearn.linear_model import LogisticRegression, LinearRegression
 from hyperopt import hp, tpe, fmin, STATUS_OK, Trials, space_eval
 from hyperopt.pyll.base import scope
 from hyperopt.pyll.stochastic import sample
+from datetime import datetime
+from pandas.plotting import scatter_matrix
 
 warnings.simplefilter(action='ignore', category=Warning)
 warnings.simplefilter(action='ignore', category=FutureWarning)
@@ -59,9 +63,7 @@ def dataManipulate(allData):
         commonTitles).fillna('Rare')
     allData['AgeGroups'] = pd.cut(allData['Age'], 10)
 
-    grouped = allData.groupby(['Sex', 'Pclass', 'Title'])
-    allData.to_csv(os.path.join(currentPath, 'allData.csv'),
-                   sep=',', index=False)
+    grouped = allData.groupby(['Sex', 'Pclass', 'Title', 'Fare', 'SibSp'])
 
     allData['Age'] = grouped['Age'].apply(lambda x: x.fillna(x.median()))
     allData.loc[allData['Fare'] == 0.0, 'Fare'] = np.NaN
@@ -76,6 +78,9 @@ def dataManipulate(allData):
     numerical_features = list(allData.select_dtypes(
         include=['int64', 'float64']).columns)
     numerical_features.remove('Survived')
+    numerical_features.remove('Pclass')
+    numerical_features.remove('SibSp')
+    numerical_features.remove('Parch')
     allData[numerical_features] = scaler.fit_transform(
         allData[numerical_features])
 
@@ -95,8 +100,19 @@ def dataManipulate(allData):
     pickle.dump(allData, open(os.path.join(
         currentPath, 'preparedData.p'), 'wb'))
 
-    allData.to_csv(os.path.join(
-        currentPath, 'allData.csv'), sep=',', index=False)
+    parameters = [
+        'Pclass',
+        'Sex',
+        'Age',
+        'Ticket',
+        'Fare',
+        'Embarked',
+        'Cabin',
+        'Survived'
+    ]
+
+    scatter_matrix(allData[parameters], figsize=(12, 8))
+    plt.show()
 
     return allData
 
@@ -104,10 +120,9 @@ def dataManipulate(allData):
 def tuneHyperparams(finalModel, X_train, y_train):
     global params
     params = {
-        'activation': hp.choice('activation', ['identity', 'logistic', 'tanh', 'relu']),
-        'solver': hp.choice('solver', ['lbfgs', 'sgd', 'adam']),
-        'learning_rate': hp.choice('learning_rate', ['constant', 'invscaling', 'adaptive']),
-        'random_state': hp.choice('random_state', np.arange(1, 10, dtype=int)),
+        # 'activation': hp.choice('activation', ['identity', 'logistic', 'tanh', 'relu']),
+        'hidden_layer_sizes': hp.choice('hidden_layer_sizes', [(6, 1), (6, 2), (6, 3), (6, 4)]),
+        # 'alpha': hp.uniform('alpha', 0.0001, 0.05),
     }
 
     def objective(params):
@@ -128,10 +143,11 @@ def tuneHyperparams(finalModel, X_train, y_train):
         max_evals=500,
         trials=trials
     )
-    pickle.dump(bestParams, open(os.path.join(
-        currentPath, 'bestParams.p'), 'wb'))
 
     bestParams = space_eval(params, bestParams)
+
+    pickle.dump(bestParams, open(os.path.join(
+        currentPath, 'bestParams.p'), 'wb'))
 
     return bestParams
 
@@ -203,10 +219,21 @@ def trainModel(finalData):
             bestParams = tuneHyperparams(finalModel, X_train, y_train)
             print(bestParams)
 
-    # bestParams = space_eval(params, bestParams)
-
     finalModel = MLPRegressor(
-        alpha=1e-05, hidden_layer_sizes=(50, 50), activation='tanh', learning_rate='adaptive', random_state=3, solver='sgd')
+        early_stopping=True,
+        # warm_start=True,
+        **bestParams,
+        # learning_rate='adaptive',
+        solver='lbfgs',
+        # alpha=0.038631125378018064,
+        activation='tanh'
+    )
+
+    """finalModel = MLPRegressor(
+        hidden_layer_sizes=(6,),
+        activation='logistic',
+        solver='lbfgs',
+    ) """
 
     finalModel.fit(X_train, y_train)
     print('\n Cross validation score for tuned: \t', max(np.sqrt(-
@@ -216,21 +243,21 @@ def trainModel(finalData):
     print('Prediction accuracy for tuned: \t \t',
           mean_squared_error(y_predict, y_test))
 
-    """ adaFinalModel2 = AdaBoostRegressor(
+    adaFinalModel2 = AdaBoostRegressor(
         base_estimator=finalModel, n_estimators=200)
 
-    # finalParams = tuneFinal(adaFinalModel2, X_train, y_train)
+    """ finalParams = tuneFinal(adaFinalModel2, X_train, y_train)
 
-    # adaFinalModel2 = AdaBoostClassifier(
-    # base_estimator=finalModel, **finalParams)
-
+    adaFinalModel2 = AdaBoostRegressor(
+        base_estimator=finalModel, **finalParams)
+    """
     adaFinalModel2.fit(X_train, y_train)
     print('\n Cross validation score for boosted: \t', max(np.sqrt(-
                                                                    cross_val_score(adaFinalModel2, X_train, y_train, scoring='neg_mean_squared_error', cv=3))))
 
     y_predict = adaFinalModel2.predict(X_test)
     print('Prediction accuracy for boosted: \t \t',
-          mean_squared_error(y_predict, y_test)) """
+          mean_squared_error(y_predict, y_test))
 
     pickle.dump(finalModel, open(
         os.path.join(currentPath, 'finalModel.p'), 'wb'))
@@ -241,10 +268,8 @@ def chooseModel(data):
     X_train = data
 
     modellist = (
-        RandomForestClassifier(),
-        MLPClassifier(max_iter=20000),
-        LogisticRegression(),
-        MLPRegressor(max_iter=20000),
+        MLPClassifier(max_iter=1000),
+        MLPRegressor(max_iter=1000),
     )
 
     models = (model.fit(X_train, y_train) for model in modellist)
@@ -303,12 +328,19 @@ else:
     lastModel = pickle.load(
         open(os.path.join(currentPath, 'finalModel.p'), 'rb'))
 
+y_test = trainDataF.pop['Survived']
+X_test = trainDataF
 
-""" 
+print('\n Accuracy for final predictions are: {:.3f}'.format(
+    lastModel.score(X_test, y_test)))
+
 testDataF = testDataF.drop('Survived', axis=1)
 survived = lastModel.predict(testDataF)
 finalSurvived = pd.DataFrame(testData['PassengerId'])
 finalSurvived['Survived'] = survived
-finalSurvived.to_csv(os.path.join(currentPath, 'submission.csv'), sep=',', index=False) 
+finalSurvived.to_csv(os.path.join(
+    currentPath, 'submission.csv'), sep=',', index=False)
 
-"""
+if input('\n Submit? [y/n] \t') == 'y':
+    subprocess.Popen(
+        'kaggle competitions submit - c titanic - f submission.csv - m', str(datetime))
