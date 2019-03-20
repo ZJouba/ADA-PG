@@ -283,7 +283,7 @@ if input('\n Submit? [y/n] \t') == 'y':
 
     now = datetime.now()
 
-    subString = 'kaggle competitions submit - c titanic - f submission.csv - m "' + \
+    subString = 'kaggle competitions submit -c titanic -f submission.csv -m "' + \
         str(now.strftime("%Y-%m-%d %H:%M") + '"')
     print(subString)
     subprocess.run(subString)
