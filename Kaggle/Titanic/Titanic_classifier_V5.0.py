@@ -76,6 +76,9 @@ def dataManipulate(allData):
     bins = KBinsDiscretizer(encode='onehot-dense', n_bins=3)
     binsFare = bins.fit_transform(allData[['Fare']])
     allData['Fare'] = binsFare
+    bins1 = KBinsDiscretizer(encode='onehot-dense', n_bins=3)
+    binsFarePH = bins1.fit_transform(allData[['FarePerHead']])
+    allData['FarePerHead'] = binsFarePH
 
     allData = predictAge(allData)
 
