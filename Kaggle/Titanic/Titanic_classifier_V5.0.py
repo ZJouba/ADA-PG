@@ -46,13 +46,15 @@ def dataManipulate(allData):
     allData['Title'] = allData['Title'].map(
         commonTitles).fillna('Rare')
     allData['AgeGroups'] = pd.cut(allData['Age'], 10)
-    allData['FarePerHead'] = allData['Fare']/allData['FamilySize'].astype(int)
 
     grouped = allData.groupby(['Sex', 'Pclass', 'Title'])
     # allData['Age'] = grouped['Age'].apply(lambda x: x.fillna(x.median()))
     allData.loc[allData['Fare'] == 0.0, 'Fare'] = np.NaN
     allData['Fare'] = grouped['Fare'].apply(
         lambda x: x.fillna(x.median()))
+
+    allData['FarePerHead'] = (
+        allData['Fare']/allData['FamilySize']).astype(int)
 
     embarkedMost = allData['Embarked'].value_counts().index[0]
     allData['Embarked'] = allData['Embarked'].fillna(embarkedMost)
@@ -67,11 +69,10 @@ def dataManipulate(allData):
     allData['Pclass'] = encoder.fit_transform(allData[['Pclass']])
 
     scaler = StandardScaler()
-    allData[['SibSp']] = scaler.fit_transform(allData[['SibSp']])
-    allData[['Parch']] = scaler.fit_transform(allData[['Parch']])
-    allData[['FamilySize']] = scaler.fit_transform(allData[['FamilySize']])
-    allData[['Pclass']] = scaler.fit_transform(allData[['Pclass']])
-    allData[['FarePerHead']] = scaler.fit_transform(allData[['FarePerHead']])
+    allData['SibSp'] = scaler.fit_transform(allData[['SibSp']])
+    allData['Parch'] = scaler.fit_transform(allData[['Parch']])
+    allData['FamilySize'] = scaler.fit_transform(allData[['FamilySize']])
+    allData['Pclass'] = scaler.fit_transform(allData[['Pclass']])
 
     bins = KBinsDiscretizer(encode='onehot-dense', n_bins=3)
     binsFare = bins.fit_transform(allData[['Fare']])
