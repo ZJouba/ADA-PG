@@ -61,16 +61,17 @@ def dataManipulate(allData):
     allData[['Sex']] = lbinar.fit_transform(allData[['Sex']])
 
     encoder = OneHotEncoder(sparse=False)
-    allData[['Embarked']] = encoder.fit_transform(allData[['Embarked']])
-    allData[['Title']] = encoder.fit_transform(allData[['Title']])
-    allData[['Cabin']] = encoder.fit_transform(allData[['Cabin']])
-    allData[['Pclass']] = encoder.fit_transform(allData[['Pclass']])
+    allData['Embarked'] = encoder.fit_transform(allData[['Embarked']])
+    allData['Title'] = encoder.fit_transform(allData[['Title']])
+    allData['Cabin'] = encoder.fit_transform(allData[['Cabin']])
+    allData['Pclass'] = encoder.fit_transform(allData[['Pclass']])
 
     scaler = StandardScaler()
     allData[['SibSp']] = scaler.fit_transform(allData[['SibSp']])
     allData[['Parch']] = scaler.fit_transform(allData[['Parch']])
     allData[['FamilySize']] = scaler.fit_transform(allData[['FamilySize']])
     allData[['Pclass']] = scaler.fit_transform(allData[['Pclass']])
+    allData[['FarePerHead']] = scaler.fit_transform(allData[['FarePerHead']])
 
     bins = KBinsDiscretizer(encode='onehot-dense', n_bins=3)
     binsFare = bins.fit_transform(allData[['Fare']])
@@ -155,7 +156,7 @@ def trainModel(finalData):
     y_test = test.pop('Survived')
     X_test = test
 
-    finalModel = XGBClassifier(subsample=0.8, max_depth=2)
+    finalModel = XGBClassifier()
 
     finalModel.fit(X_train, y_train)
     print('\n Cross validation score for untuned: \t',
@@ -180,7 +181,7 @@ def trainModel(finalData):
             open(os.path.join(currentPath, 'bestParamsGrid.p'), 'rb'))
 
     finalModel = XGBClassifier(**bestParams)
-    # finalModel = XGBClassifier(subsample=0.8, max_depth=2, **bestParams)
+    # finalModel = XGBClassifier(colsample_bytree=0.5, gamma=1, learning_rate=0.003, max_depth=3, n_estimators=2000, subsample=1)
 
     finalModel.fit(X_train, y_train)
     print('\n Cross validation score for tuned: \t',
@@ -258,7 +259,7 @@ allData = allData.drop(
 
 trainDataF = allData[:891]
 testDataF = allData.iloc[891:]
-chooseModel(trainDataF)
+
 trainModel(trainDataF)
 
 lastModel = pickle.load(
@@ -282,7 +283,7 @@ if input('\n Submit? [y/n] \t') == 'y':
 
     now = datetime.now()
 
-    subString = 'kaggle competitions submit - c titanic - f ' + str(
-        pathname) + ' - m "' + str(now.strftime("%Y-%m-%d %H:%M") + '"')
+    subString = 'kaggle competitions submit - c titanic - f submission.csv - m "' + \
+        str(now.strftime("%Y-%m-%d %H:%M") + '"')
     print(subString)
     subprocess.run(subString)
