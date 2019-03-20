@@ -7,12 +7,13 @@ import subprocess
 import matplotlib.pyplot as plt
 
 from tabulate import tabulate
-from sklearn.ensemble import VotingClassifier, GradientBoostingClassifier, RandomForestClassifier
+from sklearn.ensemble import VotingClassifier, GradientBoostingClassifier, RandomForestClassifier, AdaBoostClassifier, BaggingClassifier, ExtraTreesClassifier
 from sklearn.model_selection import cross_val_score, train_test_split, GridSearchCV
 from sklearn.metrics import mean_squared_error, accuracy_score, confusion_matrix
 from sklearn.neural_network import MLPClassifier, MLPRegressor
 from sklearn.linear_model import LogisticRegression, LinearRegression
 from sklearn.svm import SVC
+from sklearn.tree import DecisionTreeClassifier
 from hyperopt import hp, tpe, fmin, STATUS_OK, Trials, space_eval
 from hyperopt.pyll.base import scope
 from hyperopt.pyll.stochastic import sample
@@ -66,7 +67,6 @@ def dataManipulate(allData):
 
     grouped = allData.groupby(['Sex', 'Pclass', 'Title'])
 
-    allData['Age'] = grouped['Age'].apply(lambda x: x.fillna(x.median()))
     allData.loc[allData['Fare'] == 0.0, 'Fare'] = np.NaN
     allData['Fare'] = grouped['Fare'].apply(
         lambda x: x.fillna(x.median()))
@@ -93,9 +93,57 @@ def dataManipulate(allData):
 
     scaler = StandardScaler()
 
-    allData[['Age']] = scaler.fit_transform(allData[['Age']])
     allData[['Fare']] = scaler.fit_transform(allData[['Fare']])
     allData[['Pclass']] = scaler.fit_transform(allData[['Pclass']])
+
+    ageTrainData = allData.loc[allData['Age'].notnull()]
+    ageTrainData = ageTrainData.drop(
+        ['Ticket', 'Name', 'AgeGroups', 'Cabin'], axis=1)
+    agePredictLabels = allData[pd.isnull(allData['Age'])]
+    agePredictLabels = agePredictLabels.drop(
+        ['Ticket', 'Name', 'AgeGroups', 'Cabin'], axis=1)
+
+    y_train_age = ageTrainData.pop('Age')
+    X_train_age = ageTrainData
+
+    MLPClf = MLPRegressor(
+        # activation='relu',
+        # alpha=1e-05,
+        # batch_size='auto',
+        # beta_1=0.9,
+        # beta_2=0.999,
+        # early_stopping=False,
+        # epsilon=1e-08,
+        # hidden_layer_sizes=(50, 50),
+        # learning_rate='constant',
+        # learning_rate_init=0.001,
+        # max_iter=200,
+        # momentum=0.9,
+        # nesterovs_momentum=True,
+        # power_t=0.5,
+        # random_state=1,
+        # shuffle=True,
+        # solver='lbfgs',
+        # tol=0.0001,
+        # validation_fraction=0.1,
+        # warm_start=False
+    )
+
+    MLPClf.fit(X_train_age, y_train_age)
+
+    X_predict_age = agePredictLabels.drop(['Age'], axis=1)
+
+    age_predicted = MLPClf.predict(X_predict_age)
+
+    agePredictLabels = allData[pd.isnull(allData['Age'])]
+    agePredictLabels['Age'] = age_predicted
+    ageTrainData = allData.loc[allData['Age'].notnull()]
+
+    allData = pd.concat([ageTrainData, agePredictLabels])
+
+    allData.sort_values(['PassengerId'], ascending=[True], inplace=True)
+
+    allData[['Age']] = scaler.fit_transform(allData[['Age']])
 
     pickle.dump(allData, open(os.path.join(
         currentPath, 'preparedData.p'), 'wb'))
@@ -169,7 +217,8 @@ def tuneFinal(model, X_train, y_train):
 
 
 def trainModel(finalData):
-    train, test = train_test_split(finalData, stratify=finalData['Survived'])
+    train, test = train_test_split(
+        finalData, test_size=0.3, stratify=finalData['Survived'])
 
     y_train = train.pop('Survived')
     X_train = train
@@ -177,61 +226,10 @@ def trainModel(finalData):
     y_test = test.pop('Survived')
     X_test = test
 
-    A = RandomForestClassifier(
-        # criterion='gini',
-        # n_estimators=700,
-        # min_samples_split=10,
-        # min_samples_leaf=1,
-        # max_features='auto',
-        # oob_score=True,
-    )
-    B = GradientBoostingClassifier(
-        # criterion='friedman_mse',
-        # learning_rate=0.075,
-        # loss='deviance',
-        # max_depth=3,
-        # max_features='log2',
-        # min_samples_leaf=0.1,
-        # min_samples_split=0.3545454545454546,
-        # n_estimators=10,
-        # subsample=1.0
-    )
-    C = LogisticRegression(
-        # C=5.1000100000000002,
-        # class_weight=None,
-        # dual=False,
-        # fit_intercept=True,
-        # intercept_scaling=1,
-        # max_iter=100,
-        # multi_class='ovr',
-        # n_jobs=1,
-        # penalty='l2',
-        # solver='liblinear',
-        # tol=0.0001,
-        # warm_start=False
-    )
-    D = MLPClassifier(
-        # activation='relu',
-        # alpha=1e-05,
-        # batch_size='auto',
-        # beta_1=0.9,
-        # beta_2=0.999,
-        # early_stopping=False,
-        # epsilon=1e-08,
-        # hidden_layer_sizes=(50, 50),
-        # learning_rate='constant',
-        # learning_rate_init=0.001,
-        # max_iter=200,
-        # momentum=0.9,
-        # nesterovs_momentum=True,
-        # power_t=0.5,
-        # random_state=1,
-        # shuffle=True,
-        # solver='lbfgs',
-        # tol=0.0001,
-        # validation_fraction=0.1,
-        # warm_start=False
-    )
+    A = RandomForestClassifier()
+    B = LogisticRegression()
+    C = MLPClassifier()
+    D = SVC(kernel="rbf", probability=True)
 
     finalModel = VotingClassifier(
         estimators=[('A', A), ('B', B), ('C', C), ('D', D)],
@@ -248,7 +246,8 @@ def trainModel(finalData):
               cv=3
           ))))
 
-    y_predict = finalModel.predict(X_test)
+    y_predict = pd.DataFrame(finalModel.predict(X_test))
+
     print('Prediction accuracy for untuned: \t',
           accuracy_score(y_predict, y_test))
 
@@ -424,6 +423,10 @@ finalSurvived.to_csv(os.path.join(
 pathname = os.path.join(
     currentPath, 'submission.csv')
 
+"""
+
 if input('\n Submit? [y/n] \t') == 'y':
     subprocess.Popen(
         ['kaggle competitions submit - c titanic - f ', str(pathname), ' - m', str(datetime)])
+
+"""
