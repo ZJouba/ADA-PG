@@ -4,7 +4,6 @@ import numpy as np
 import pickle
 import warnings
 
-from scipy.stats import boxcox
 from tabulate import tabulate
 from sklearn.model_selection import cross_val_score, train_test_split, GridSearchCV
 from sklearn.metrics import mean_squared_error, accuracy_score, confusion_matrix
@@ -12,13 +11,15 @@ from sklearn.calibration import CalibratedClassifierCV
 from xgboost import XGBClassifier, XGBRegressor
 from sklearn.exceptions import DataConversionWarning
 
+from sklearn.preprocessing import OneHotEncoder
+
 warnings.simplefilter(action='ignore', category=DataConversionWarning)
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
 
 def dataManipulate(allData):
     import re
-    from sklearn.preprocessing import OneHotEncoder, StandardScaler, LabelBinarizer, KBinsDiscretizer, Binarizer, MinMaxScaler
+    from sklearn.preprocessing import OneHotEncoder, StandardScaler, LabelBinarizer, KBinsDiscretizer, Binarizer
     import seaborn as sea
     import matplotlib.pyplot as plt
 
@@ -46,9 +47,10 @@ def dataManipulate(allData):
     allData['Title'] = allData['Name'].apply(titles)
     allData['Title'] = allData['Title'].map(
         commonTitles).fillna('Rare')
-    allData['AgeGroups'] = pd.cut(allData['Age'], 10)
+    """allData['AgeGroups'] = pd.cut(allData['Age'], 10)
 
     grouped = allData.groupby(['Sex', 'Pclass', 'Title'])
+    # allData['Age'] = grouped['Age'].apply(lambda x: x.fillna(x.median()))
     allData.loc[allData['Fare'] == 0.0, 'Fare'] = np.NaN
     allData['Fare'] = grouped['Fare'].apply(
         lambda x: x.fillna(x.median()))
@@ -68,24 +70,15 @@ def dataManipulate(allData):
     allData['Cabin'] = encoder.fit_transform(allData[['Cabin']])
     allData['Pclass'] = encoder.fit_transform(allData[['Pclass']])
 
-    allData['Fare'], lam = boxcox(allData['Fare'])
-
     scaler = StandardScaler()
-    allData['Fare'] = scaler.fit_transform(allData[['Fare']])
     allData['SibSp'] = scaler.fit_transform(allData[['SibSp']])
-    allData['FamilySize'] = scaler.fit_transform(allData[['FamilySize']])
     allData['Parch'] = scaler.fit_transform(allData[['Parch']])
+    allData['FamilySize'] = scaler.fit_transform(allData[['FamilySize']])
+    allData['Pclass'] = scaler.fit_transform(allData[['Pclass']])
 
-    minMax = MinMaxScaler()
-    allData['Fare'] = minMax.fit_transform(allData[['Fare']])
-    allData['SibSp'] = minMax.fit_transform(allData[['SibSp']])
-    allData['Parch'] = minMax.fit_transform(allData[['Parch']])
-    allData['FamilySize'] = minMax.fit_transform(allData[['FamilySize']])
-    allData['Pclass'] = minMax.fit_transform(allData[['Pclass']])
-
-    # bins = KBinsDiscretizer(encode='onehot-dense', n_bins=6)
-    # binsFare = bins.fit_transform(allData[['Fare']])
-    # allData['Fare'] = binsFare
+    bins = KBinsDiscretizer(encode='onehot-dense', n_bins=3)
+    binsFare = bins.fit_transform(allData[['Fare']])
+    allData['Fare'] = binsFare
     bins1 = KBinsDiscretizer(encode='onehot-dense', n_bins=3)
     binsFarePH = bins1.fit_transform(allData[['FarePerHead']])
     allData['FarePerHead'] = binsFarePH
@@ -102,12 +95,7 @@ def dataManipulate(allData):
     # sea.pairplot(data=allData[['Fare', 'Survived', 'Age', 'SibSp',
     #                            'Parch', 'Pclass']], hue='Survived')
     # plt.show()
-
-    allData['FamilySize'], lam = boxcox(allData['FamilySize'] + 1)
-
-    allData.hist(figsize=(10, 10))
-    plt.show()
-
+    """
     return allData
 
 
@@ -174,7 +162,7 @@ def trainModel(finalData):
     y_test = test.pop('Survived')
     X_test = test
 
-    finalModel = XGBClassifier()
+    finalModel = XGBClassifier(random_state=9)
 
     finalModel.fit(X_train, y_train)
     print('\n Cross validation score for untuned: \t',
@@ -198,7 +186,7 @@ def trainModel(finalData):
         bestParams = pickle.load(
             open(os.path.join(currentPath, 'bestParamsGrid.p'), 'rb'))
 
-    finalModel = XGBClassifier(**bestParams)
+    finalModel = XGBClassifier(**bestParams, random_state=9)
     # finalModel = XGBClassifier(colsample_bytree=0.5, gamma=1, learning_rate=0.003, max_depth=3, n_estimators=2000, subsample=1)
 
     finalModel.fit(X_train, y_train)
@@ -273,9 +261,13 @@ allData = trainData.append(testData, ignore_index=True)
 
 allData = dataManipulate(allData)
 allData = allData.drop(
-    ['PassengerId', 'Ticket', 'Name', 'AgeGroups', 'Cabin'], axis=1)
+    ['PassengerId', 'Ticket', 'Name', 'Cabin'], axis=1)
+allData = allData.dropna()
+encoder = OneHotEncoder(sparse=False)
+allData['Sex'] = encoder.fit_transform(allData[['Sex']])
+allData['Embarked'] = encoder.fit_transform(allData[['Embarked']])
 
-trainDataF = allData.iloc[:891]
+trainDataF = allData[:891]
 testDataF = allData.iloc[891:]
 
 trainModel(trainDataF)

@@ -1,0 +1,8 @@
+digraph Tree {
+node [shape=box] ;
+0 [label="GroupSurvivalRate <= 0.25\nentropy = 0.87\nsamples = 757\nvalue = [537, 220]"] ;
+1 [label="entropy = 0.0\nsamples = 463\nvalue = [463, 0]"] ;
+0 -> 1 [labeldistance=2.5, labelangle=45, headlabel="True"] ;
+2 [label="entropy = 0.814\nsamples = 294\nvalue = [74, 220]"] ;
+0 -> 2 [labeldistance=2.5, labelangle=-45, headlabel="False"] ;
+}
