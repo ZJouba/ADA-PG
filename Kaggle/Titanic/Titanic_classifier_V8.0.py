@@ -10,7 +10,7 @@ from tabulate import tabulate
 from sklearn.model_selection import cross_val_score, train_test_split, GridSearchCV, cross_val_predict
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.metrics import mean_squared_error, accuracy_score, confusion_matrix, roc_curve
-from sklearn.calibration import CalibratedClassifierCV
+from sklearn.ensemble import GradientBoostingClassifier
 from sklearn import tree
 from sklearn import ensemble
 from xgboost import XGBClassifier, XGBRegressor
@@ -22,8 +22,6 @@ import matplotlib.pyplot as plt
 from pandas.plotting import scatter_matrix
 
 warnings.filterwarnings('ignore')
-# warnings.simplefilter(action='ignore', category=DataConversionWarning)
-# warnings.simplefilter(action='ignore', category=FutureWarning)
 
 
 def dataManipulate(allData):
@@ -78,93 +76,55 @@ def dataManipulate(allData):
     allData['Surname'] = allData['Name'].apply(surname)
     allData['TicketShort'] = allData['Ticket'].str[:-2]
     allData['FamilySize'] = allData['SibSp'] + allData['Parch'] + 1
+    # sea.countplot(allData['FamilySize'], hue=allData['Survived'])
+    # plt.show()
     allData['Alone'] = False
     allData.loc[allData['FamilySize'] == 1, 'Alone'] = True
-    allData['GroupID'] = allData[['Surname', 'Pclass', 'TicketShort','Fare', 'Embarked']].apply(lambda x: '-'.join(x.map(str)), axis=1)
+    allData['GroupID'] = allData[['Surname', 'Pclass', 'TicketShort',
+                                  'Fare', 'Embarked']].apply(lambda x: '-'.join(x.map(str)), axis=1)
     allData.loc[allData['SexGroup'] == 'Man', 'GroupID'] = 'Alone'
-    allData.loc[allData.groupby('GroupID')['GroupID'].transform(lambda x: x.count()) == 1, 'GroupID'] = 'Alone'
+    allData.loc[allData.groupby('GroupID')['GroupID'].transform(
+        lambda x: x.count()) == 1, 'GroupID'] = 'Alone'
 
     grouped = allData.groupby(['Sex', 'Pclass', 'Title'])
+
     allData.loc[allData['Fare'] == 0.0, 'Fare'] = np.NaN
+    allData.loc[allData['Age'] == 0.0, 'Age'] = np.NaN
     allData['Fare'] = grouped['Fare'].apply(lambda x: x.fillna(x.median()))
+    allData['Age'] = grouped['Age'].apply(lambda x: x.fillna(x.median()))
 
-    allData['FarePerHead'] = (allData['Fare']/allData['FamilySize']).astype(int)
+    allData['FarePerHead'] = (
+        allData['Fare']/allData['FamilySize']).astype(int)
 
-    allData['Embarked'] = allData['Embarked'].fillna(allData['Embarked'].value_counts().index[0])
+    allData['Embarked'] = allData['Embarked'].fillna(
+        allData['Embarked'].value_counts().index[0])
 
-    groupIds = allData.drop_duplicates('GroupID').set_index('Ticket')['GroupID']
+    groupIds = allData.drop_duplicates(
+        'GroupID').set_index('Ticket')['GroupID']
 
-    allData.loc[(allData['SexGroup'] != 'Man') & (allData['GroupID'] == 'Alone'),'GroupID'] = allData['Ticket'].map(groupIds).fillna('Alone')
+    allData.loc[(allData['SexGroup'] != 'Man') & (allData['GroupID'] == 'Alone'),
+                'GroupID'] = allData['Ticket'].map(groupIds).fillna('Alone')
 
     lbinar = LabelBinarizer()
     allData['Sex'] = lbinar.fit_transform(allData[['Sex']])
 
-    ageData = allData.copy(deep=True)
-
-    encoder = OneHotEncoder(sparse=False)
-    ageData['Embarked'] = encoder.fit_transform(ageData[['Embarked']])
-    ageData['Title'] = encoder.fit_transform(ageData[['Title']])
-
-    ageData['Fare'], lam = boxcox(ageData['Fare'])
-
-    scaler = StandardScaler()
-    ageData['Fare'] = scaler.fit_transform(ageData[['Fare']])
-    ageData['SibSp'] = scaler.fit_transform(ageData[['SibSp']])
-    ageData['FamilySize'] = scaler.fit_transform(ageData[['FamilySize']])
-    ageData['Parch'] = scaler.fit_transform(ageData[['Parch']])
-
-    minMax = MinMaxScaler()
-    ageData['Fare'] = minMax.fit_transform(ageData[['Fare']])
-    ageData['SibSp'] = minMax.fit_transform(ageData[['SibSp']])
-    ageData['Parch'] = minMax.fit_transform(ageData[['Parch']])
-    ageData['FamilySize'] = minMax.fit_transform(ageData[['FamilySize']])
-
-    bins1 = KBinsDiscretizer(encode='onehot-dense', n_bins=3)
-    binsFarePH = bins1.fit_transform(ageData[['FarePerHead']])
-    ageData['FarePerHead'] = binsFarePH
-
-    ageData = predictAge(ageData)
-    allData['Age'] = ageData['Age']
+    scaler = MinMaxScaler()
+    allData['Age'] = scaler.fit_transform(allData[['Age']])
 
     allData['TicketCount'] = allData.groupby('Ticket')['Ticket'].transform(
         lambda x: x.fillna(0).count())
-    allData['FeatureX'] = (allData['Fare'] / allData['TicketCount'])
-    allData['TransformAge'] = scaler.fit_transform(allData[['Age']])
-    allData['FeatureY'] = (allData['FamilySize'] + allData['TransformAge'])
+    allData['FeatureX'] = (allData['Fare'] / (allData['TicketCount']))
+    allData['FeatureY'] = (allData['FamilySize'] + allData['Age'])
+
+    scaler = StandardScaler()
+    allData['FeatureX'] = scaler.fit_transform(allData[['FeatureX']])
+    allData['FeatureY'] = scaler.fit_transform(allData[['FeatureY']])
+
+    allData['FeatureX'], lam = boxcox(allData['FeatureX'] + 1)
 
     allData.to_csv(
         os.path.join(currentPath, 'surnames.csv'), sep=',', index=False
     )
-
-    return allData
-
-
-def predictAge(allData):
-    ageTrainData = allData.loc[allData['Age'].notnull()]
-    ageTrainData = ageTrainData.drop(
-        ['Ticket', 'Name', 'Cabin', 'SexGroup', 'Surname', 'TicketShort', 'GroupID'], axis=1)
-    agePredictLabels = allData[pd.isnull(allData['Age'])]
-    agePredictLabels = agePredictLabels.drop(
-        ['Ticket', 'Name', 'Cabin', 'SexGroup', 'Surname', 'TicketShort', 'GroupID'], axis=1)
-
-    y_train_age = ageTrainData.pop('Age')
-    X_train_age = ageTrainData
-
-    xgClass = XGBClassifier()
-
-    xgClass.fit(X_train_age, y_train_age)
-
-    X_predict_age = agePredictLabels.drop(['Age'], axis=1)
-
-    age_predicted = xgClass.predict(X_predict_age)
-
-    agePredictLabels = allData[pd.isnull(allData['Age'])]
-    agePredictLabels['Age'] = age_predicted
-    ageTrainData = allData.loc[allData['Age'].notnull()]
-
-    allData = pd.concat([ageTrainData, agePredictLabels])
-
-    allData.sort_values(['PassengerId'], ascending=[True], inplace=True)
 
     return allData
 
@@ -179,8 +139,6 @@ def tuneGridCV(finalModel, X_train, y_train, params):
 
     print(bestParams)
     print(gridCV.best_estimator_)
-    # pickle.dump(bestParams, open(os.path.join(
-    #     currentPath, 'bestParamsGrid.p'), 'wb'))
 
     return gridCV.best_estimator_
 
@@ -208,30 +166,33 @@ def trainModel(finalData):
     # RANDOM FOREST
     # params = {
     #     'criterion': ['gini', 'entropy'],
-    #     'max_depth': [5, 6, 7, 8, 9, 10],
-    #     'n_estimators': [5, 6, 7, 8, 9, 10]
+    #     'max_depth': [2, 4, 6, 8, 10],
+    #     'n_estimators': [3, 6, 9]
     # }
     # finalModel = ensemble.RandomForestClassifier(oob_score=True)
     # finalModel = tuneGridCV(finalModel, X_train, y_train, params)
     # finalModel = ensemble.RandomForestClassifier(
-    # oob_score=True, max_depth=3, criterion='gini', n_estimators=3)
+    #     oob_score=True, max_depth=3, criterion='gini', n_estimators=3)
 
     # XGBClassifier
-    params = {
-        'learning_rate': [0.03, 0.035, 0.04],
-        'gamma': [0, 1, 5],
-        'subsample': [0.8, 0.9, 1],
-        'colsample_bytree': [0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
-        'max_depth': [1, 2, 3],
-        'n_estimators': [10, 50, 100, 1000, 2000, 5000],
-    }
-    # finalModel = XGBClassifier(objective='binary:logistic', eval_metric='error', max_depth=5, eta=0.1, gamma=0.1, colsample_bytree=1, min_child_weight=1)
-    finalModel = XGBClassifier(colsample_bytree=0.8, gamma=5, learning_rate=0.035, max_depth=3, n_estimators=5000, subsample=0.8)
-    
+    # params = {
+    #     'learning_rate': [0.08, 0.09, 0.1],
+    # #     'gamma': [0, 1, 5],
+    # #     'subsample': [0.8, 0.9, 1],
+    # #     'colsample_bytree': [0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
+    #     'max_depth': [1, 2, 3, 4, 5],
+    #     'n_estimators': [10, 15, 20],
+    # }
+    # finalModel = XGBClassifier()
+    # # finalModel = XGBClassifier(objective='binary:logistic', eval_metric='error', max_depth=5, eta=0.1, gamma=0.1, colsample_bytree=1, min_child_weight=1)
+    # # finalModel = XGBClassifier(colsample_bytree=0.8, gamma=5, learning_rate=0.035, max_depth=3, n_estimators=5000, subsample=0.8)
+    # finalModel = tuneGridCV(finalModel, X_train, y_train, params)
+
+    # GRADIENT BOOSTING CLASSIFIER
+    finalModel = GradientBoostingClassifier()
 
     finalModel.fit(X_train, y_train)
-    # (colsample_bytree=0.8, gamma=5, learning_rate=0.035, max_depth=3, n_estimators=5000, subsample=0.8)
-    # finalModel = tuneGridCV(finalModel, X_train, y_train, params)
+
     print('\n Cross validation score for untuned: \t',
           max(np.sqrt(-cross_val_score(
               finalModel,
@@ -244,26 +205,28 @@ def trainModel(finalData):
     # RANDOM FOREST
     # print('\n OOB score: \t', finalModel.oob_score_)
     print('Model score: \t', finalModel.score(X_test, y_test))
- 
-    y_predict1 = finalModel.predict_proba(X_test)
-    y_predict = [1. if y > 0.9 else 0. for y in y_predict1[:,0]]
+
+    global thresh
+    thresh = 0.9
+
+    # y_predict1 = finalModel.predict_proba(X_test)
+    # y_predict = [1. if y > thresh else 0. for y in y_predict1[:, 1]]
+    y_predict = finalModel.predict(X_test)
     y_scores = cross_val_predict(finalModel, X_test, y_test, cv=3)
     print('\n Prediction accuracy for untuned: \t',
           accuracy_score(y_predict, y_test))
 
     print(confusion_matrix(y_test, y_predict))
 
-    # xgb.plot_tree(finalModel, num_trees=0)
-    # plt.show()
-
     fpr, tpr, threshold = roc_curve(y_test, y_scores)
+
     def plot_roc_curve(fpr, tpr, label=None):
         plt.plot(fpr, tpr, linewidth=2, label=label)
         plt.plot([0, 1], [0, 1], 'k--')
         plt.axis([0, 1, 0, 1])
         plt.xlabel('False Positive Rate')
         plt.ylabel('True Positive Rate')
-    
+
     # plot_roc_curve(fpr, tpr)
     # plt.show()
 
@@ -277,6 +240,44 @@ def trainModel(finalData):
     # print('\n', tabulate(featureImportance, headers='keys'), '\n')
 
     return finalModel
+
+
+def chooseModel(data):
+    from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+    from sklearn.neural_network import MLPClassifier
+
+    y_train = data.pop('Survived')
+    X_train = data
+
+    modellist = (
+        XGBClassifier(),
+        MLPClassifier(),
+        RandomForestClassifier(),
+        GradientBoostingClassifier(),
+    )
+
+    models = (model.fit(X_train, y_train) for model in modellist)
+    scoreList = []
+
+    for model in models:
+        name = type(model).__name__
+        score = np.sqrt(-cross_val_score(
+            model,
+            X_train,
+            y_train,
+            scoring='neg_mean_squared_error',
+            cv=5,
+            n_jobs=-1,
+            verbose=0
+        ))
+        scoreList = scoreList + \
+            ([[str(name), str(score.mean()), str(score.std())]])
+
+    scoreFrame = pd.DataFrame(
+        scoreList, columns=['Name', 'Mean', 'Standard Deviation'])
+    scoreFrame.sort_values(['Mean', 'Standard Deviation'], ascending=[
+                           True, False], inplace=True, )
+    print(tabulate(scoreFrame, headers='keys'))
 
 
 currentPath = os.path.dirname(__file__)
@@ -374,13 +375,11 @@ allData.loc[1251, 'Prediction'] = 0
 manualSub = pd.DataFrame(allData.iloc[891:].pop('Prediction'))
 manualSub.rename(columns={'Prediction': 'Survived'}, inplace=True)
 
-print('Survivors: ', manualSub[manualSub['Survived'] == 1].count())
-
 # TO SUBMIT MODEL PREDICTIONS:
 # modelData = allData[['SexGroup', 'GroupSurvivalRate', 'Prediction']].copy()
-modelData = allData[['SexGroup', 'Survived', 'FeatureX', 'FeatureY', 'GroupID', 'Pclass']].copy()
+modelData = allData[['Survived', 'FeatureX', 'FeatureY', 'GroupID']].copy()
 
-modelData = modelData.loc[modelData['GroupID'] == 'Alone']                     
+modelData = modelData.loc[modelData['GroupID'] == 'Alone']
 
 # modelData.rename(columns={'Prediction': 'Survived'}, inplace=True)
 
@@ -390,23 +389,24 @@ modelData.to_csv(
 
 modelData = modelData.drop('GroupID', axis=1)
 
-encoder = LabelEncoder()
-modelData['SexGroup'] = encoder.fit_transform(modelData[['SexGroup']])
-modelData['Pclass'] = encoder.fit_transform(modelData[['Pclass']])
+# encoder = LabelEncoder()
+# modelData['SexGroup'] = encoder.fit_transform(modelData[['SexGroup']])
 
+# sea.distplot(trainDataF['FeatureX'])
+# plt.show()
+# sea.distplot(trainDataF['FeatureY'])
+# plt.show()
 
 trainDataF = modelData.loc[allData['Survived'].notnull()]
-testDataF = modelData[pd.isnull(allData['Survived'])]
 
-scaler = StandardScaler()
-modelData['FeatureX'] = scaler.fit_transform(modelData[['FeatureX']])
-modelData['FeatureY'] = scaler.fit_transform(modelData[['FeatureY']])
+testDataF = modelData[pd.isnull(allData['Survived'])]
 
 lastModel = trainModel(trainDataF)
 
 testDataF = testDataF.drop('Survived', axis=1)
-finalPred = lastModel.predict_proba(testDataF)
-finalPred = [1. if y > 0.9 else 0. for y in finalPred[:,1]]
+# finalPred = lastModel.predict_proba(testDataF)
+# finalPred = [1. if y > thresh else 0. for y in finalPred[:, 1]]
+finalPred = lastModel.predict(testDataF)
 
 testDataF['Survived'] = finalPred
 
@@ -422,7 +422,6 @@ modelSub.to_csv(
 
 manualSub.update(modelSub)
 
-print('Survivors: ', manualSub[manualSub['Survived'] == 1].count())
 
 manualSub.to_csv(
     os.path.join(currentPath, 'testing.csv'), sep=',', index=True, header=['Survived']
