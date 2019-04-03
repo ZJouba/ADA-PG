@@ -16,10 +16,12 @@ from sklearn import ensemble
 from xgboost import XGBClassifier, XGBRegressor
 from sklearn.exceptions import DataConversionWarning
 from sklearn.preprocessing import OneHotEncoder, StandardScaler, LabelBinarizer, KBinsDiscretizer, Binarizer, MinMaxScaler, LabelEncoder
+from sklearn.neural_network import MLPRegressor
 import graphviz
 import seaborn as sea
 import matplotlib.pyplot as plt
 from pandas.plotting import scatter_matrix
+from sklearn.svm import SVC
 
 warnings.filterwarnings('ignore')
 
@@ -82,6 +84,7 @@ def dataManipulate(allData):
     allData.loc[allData['FamilySize'] == 1, 'Alone'] = True
     allData['GroupID'] = allData[['Surname', 'Pclass', 'TicketShort',
                                   'Fare', 'Embarked']].apply(lambda x: '-'.join(x.map(str)), axis=1)
+
     allData.loc[allData['SexGroup'] == 'Man', 'GroupID'] = 'Alone'
     allData.loc[allData.groupby('GroupID')['GroupID'].transform(
         lambda x: x.count()) == 1, 'GroupID'] = 'Alone'
@@ -108,19 +111,19 @@ def dataManipulate(allData):
     lbinar = LabelBinarizer()
     allData['Sex'] = lbinar.fit_transform(allData[['Sex']])
 
-    scaler = MinMaxScaler()
-    allData['Age'] = scaler.fit_transform(allData[['Age']])
+    # scaler = MinMaxScaler()
+    # allData['Age'] = scaler.fit_transform(allData[['Age']])
 
     allData['TicketCount'] = allData.groupby('Ticket')['Ticket'].transform(
         lambda x: x.fillna(0).count())
-    allData['FeatureX'] = (allData['Fare'] / (allData['TicketCount']))
-    allData['FeatureY'] = (allData['FamilySize'] + allData['Age'])
+    allData['FeatureX'] = (allData['Fare'] / ((allData['TicketCount'])*10))
+    allData['FeatureY'] = (allData['FamilySize'] + (allData['Age']/70))
 
-    scaler = StandardScaler()
-    allData['FeatureX'] = scaler.fit_transform(allData[['FeatureX']])
-    allData['FeatureY'] = scaler.fit_transform(allData[['FeatureY']])
+    # scaler = StandardScaler()
+    # allData['FeatureX'] = scaler.fit_transform(allData[['FeatureX']])
+    # allData['FeatureY'] = scaler.fit_transform(allData[['FeatureY']])
 
-    allData['FeatureX'], lam = boxcox(allData['FeatureX'] + 1)
+    # allData['FeatureX'], lam = boxcox(allData['FeatureX'] + 1)
 
     allData.to_csv(
         os.path.join(currentPath, 'surnames.csv'), sep=',', index=False
@@ -144,6 +147,9 @@ def tuneGridCV(finalModel, X_train, y_train, params):
 
 
 def trainModel(finalData):
+    from sklearn.preprocessing import PolynomialFeatures
+    from sklearn.pipeline import Pipeline
+
     train, test = train_test_split(
         finalData, test_size=0.25)
 
@@ -183,15 +189,44 @@ def trainModel(finalData):
     #     'max_depth': [1, 2, 3, 4, 5],
     #     'n_estimators': [10, 15, 20],
     # }
-    # finalModel = XGBClassifier()
+    finalModel = XGBClassifier()
     # # finalModel = XGBClassifier(objective='binary:logistic', eval_metric='error', max_depth=5, eta=0.1, gamma=0.1, colsample_bytree=1, min_child_weight=1)
     # # finalModel = XGBClassifier(colsample_bytree=0.8, gamma=5, learning_rate=0.035, max_depth=3, n_estimators=5000, subsample=0.8)
     # finalModel = tuneGridCV(finalModel, X_train, y_train, params)
+    # finalModel = XGBRegressor()
 
     # GRADIENT BOOSTING CLASSIFIER
-    finalModel = GradientBoostingClassifier()
+    # finalModel = GradientBoostingClassifier()
+
+    # MLP
+    # finalModel = MLPRegressor()
+
+    # SVM
+    # finalModel = SVC(kernel='poly', degree=5)
 
     finalModel.fit(X_train, y_train)
+
+    # def plotP(clf, axes):
+    #     x0s = np.linspace(axes[0], axes[1], 100)
+    #     x1s = np.linspace(axes[2], axes[3], 100)
+    #     x0, x1 = np.meshgrid(x0s, x1s)
+    #     X = np.c_[x0.ravel(), x1.ravel()]
+    #     y_pred = clf.predict(X).reshape(x0.shape)
+    #     y_decision = clf.decision_function(X).reshape(x0.shape)
+    #     plt.contourf(x0, x1, y_pred, cmap=plt.cm.brg, alpha=0.2)
+    #     plt.contourf(x0, x1, y_decision, cmap=plt.cm.brg, alpha=0.1)
+
+    # def plot_dataset(X, y, axes):
+    #     plt.plot(X.values[:, 0][y == 0], X.values[:, 1][y == 0], "bs")
+    #     plt.plot(X.values[:, 0][y == 1], X.values[:, 1][y == 1], "g^")
+    #     plt.axis(axes)
+    #     plt.grid(True, which='both')
+    #     plt.xlabel(r"$x_1$", fontsize=20)
+    #     plt.ylabel(r"$x_2$", fontsize=20, rotation=0)
+
+    # plotP(poly_svc, [-1.5, 2.5, -1, 1.5])
+    # plot_dataset(X_train, y_train, [-1.5, 2.5, -1, 1.5])
+    # plt.show()
 
     print('\n Cross validation score for untuned: \t',
           max(np.sqrt(-cross_val_score(
@@ -209,23 +244,23 @@ def trainModel(finalData):
     global thresh
     thresh = 0.9
 
-    # y_predict1 = finalModel.predict_proba(X_test)
-    # y_predict = [1. if y > thresh else 0. for y in y_predict1[:, 1]]
-    y_predict = finalModel.predict(X_test)
-    y_scores = cross_val_predict(finalModel, X_test, y_test, cv=3)
-    print('\n Prediction accuracy for untuned: \t',
-          accuracy_score(y_predict, y_test))
+    y_predict1 = finalModel.predict(X_test)
+    y_predict = [1. if y > thresh else 0. for y in y_predict1]
+    # y_predict = finalModel.predict(X_test)
+    # y_scores = cross_val_predict(finalModel, X_test, y_test, cv=3)
+    print('\n Prediction accuracy for model: \t {:.2%}'.format(
+        accuracy_score(y_predict, y_test)))
 
     print(confusion_matrix(y_test, y_predict))
 
-    fpr, tpr, threshold = roc_curve(y_test, y_scores)
+    # fpr, tpr, threshold = roc_curve(y_test, y_scores)
 
-    def plot_roc_curve(fpr, tpr, label=None):
-        plt.plot(fpr, tpr, linewidth=2, label=label)
-        plt.plot([0, 1], [0, 1], 'k--')
-        plt.axis([0, 1, 0, 1])
-        plt.xlabel('False Positive Rate')
-        plt.ylabel('True Positive Rate')
+    # def plot_roc_curve(fpr, tpr, label=None):
+    # plt.plot(fpr, tpr, linewidth=2, label=label)
+    # plt.plot([0, 1], [0, 1], 'k--')
+    # plt.axis([0, 1, 0, 1])
+    # plt.xlabel('False Positive Rate')
+    # plt.ylabel('True Positive Rate')
 
     # plot_roc_curve(fpr, tpr)
     # plt.show()
@@ -289,17 +324,14 @@ cheatFile = os.path.join(currentPath, 'CheatSheet.csv')
 cheatFile = pd.read_csv(cheatFile, header=0).set_index('PassengerId').fillna(0)
 
 trainData = pd.read_csv(trainFile, header=0, dtype={
-                        'Age': np.float64}).set_index('PassengerId')
+    'Age': np.float64}).set_index('PassengerId')
 testData = pd.read_csv(testFile, header=0, dtype={
-                       'Age': np.float64}).set_index('PassengerId')
+    'Age': np.float64}).set_index('PassengerId')
 
 labels = pd.read_csv(testFile, header=0, dtype={
     'Age': np.float64})
 
 allData = pd.concat([trainData, testData], axis=0, sort=False)
-
-# sea.pairplot(allData, hue='Survived')
-# plt.show()
 
 allData = dataManipulate(allData)
 
@@ -350,8 +382,10 @@ allData.to_csv(
 )
 
 allData['Prediction'] = 0
+
 allData['Prediction'][allData['SexGroup'] == 'Woman'] = 1
-allData['Prediction'][(allData['SexGroup'] == 'Woman') &
+
+allData['Prediction'][(allData['SexGroup'] == 'Woman') & (allData['GroupID'] != 'Alone') &
                       (allData['GroupSurvivalRate'] == 0)] = 0
 allData['Prediction'][(allData['SexGroup'] == 'Boy') &
                       (allData['GroupSurvivalRate'] == 1)] = 1
@@ -359,6 +393,9 @@ allData['Prediction'][(allData['SexGroup'] == 'Boy') &
 allData.loc[893, 'Prediction'] = 1
 allData.loc[1251, 'Prediction'] = 0
 
+allData.to_csv(
+    os.path.join(currentPath, 'surnames.csv'), sep=',', index=False
+)
 # trainPlot = allData.iloc[:891]
 
 # trainPlot = trainPlot[trainPlot['GroupID'] != 'Alone']
@@ -376,10 +413,15 @@ manualSub = pd.DataFrame(allData.iloc[891:].pop('Prediction'))
 manualSub.rename(columns={'Prediction': 'Survived'}, inplace=True)
 
 # TO SUBMIT MODEL PREDICTIONS:
+"""
 # modelData = allData[['SexGroup', 'GroupSurvivalRate', 'Prediction']].copy()
+# modelData = allData[['Survived', 'FeatureX',
+#                      'FeatureY', 'GroupID', 'Age', 'SexGroup']].copy()
 modelData = allData[['Survived', 'FeatureX', 'FeatureY', 'GroupID']].copy()
 
 modelData = modelData.loc[modelData['GroupID'] == 'Alone']
+
+modelData['FeatureY'] = modelData['FeatureY'] * 2
 
 # modelData.rename(columns={'Prediction': 'Survived'}, inplace=True)
 
@@ -399,14 +441,17 @@ modelData = modelData.drop('GroupID', axis=1)
 
 trainDataF = modelData.loc[allData['Survived'].notnull()]
 
+sea.pairplot(trainDataF, hue='Survived')
+plt.show()
+
 testDataF = modelData[pd.isnull(allData['Survived'])]
 
 lastModel = trainModel(trainDataF)
 
 testDataF = testDataF.drop('Survived', axis=1)
-# finalPred = lastModel.predict_proba(testDataF)
-# finalPred = [1. if y > thresh else 0. for y in finalPred[:, 1]]
 finalPred = lastModel.predict(testDataF)
+finalPred = [1. if y > thresh else 0. for y in finalPred]
+# finalPred = lastModel.predict(testDataF)
 
 testDataF['Survived'] = finalPred
 
@@ -426,14 +471,14 @@ manualSub.update(modelSub)
 manualSub.to_csv(
     os.path.join(currentPath, 'testing.csv'), sep=',', index=True, header=['Survived']
 )
-
-print('Manual accuracy = ', accuracy_score(
-    allData.loc[892:, 'Prediction'], cheatFile))
-print('Model accuracy = ', accuracy_score(
-    manualSub, cheatFile))
+"""
+print('Manual accuracy = {:.2%}'.format(accuracy_score(
+    manualSub, cheatFile)))
+# print('Model accuracy = {:.2%}'.format(accuracy_score(
+#     manualSub, cheatFile)))
 
 # SUBMISSION SECTION
-"""
+
 manualSub.to_csv(os.path.join(
     currentPath, 'submission.csv'), sep=',', index=True, header=['Survived'])
 pathname = os.path.join(
@@ -449,4 +494,3 @@ if input('\n Submit? [y/n] \t') == 'y':
         str(now.strftime("%Y-%m-%d %H:%M") + '"')
     print(subString)
     subprocess.run(subString)
-"""
