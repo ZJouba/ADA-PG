@@ -156,7 +156,7 @@ def main():
     # Logging for predictions
     tensorsLog = {'probabilities': 'softmax_tensor'}
 
-    logging = tf.train.LoggingTensorHook(
+    log_hook = tf.train.LoggingTensorHook(
         tensors=tensorsLog,
         every_n_iter=50
     )
@@ -174,7 +174,7 @@ def main():
     digitClassifier.train(
         input_fn=train_input,
         steps=10,
-        hooks=[logging]
+        hooks=[log_hook]
     )
 
     # Evaluation parameters
@@ -185,11 +185,11 @@ def main():
         shuffle=True
     )
 
-    """ eval_results = digitClassifier.evaluate(
+    eval_results = digitClassifier.evaluate(
         input_fn=eval_input
     )
 
-    print(eval_results) """
+    print(eval_results)
 
 
 main()
